@@ -1,4 +1,4 @@
-    :root{
+  :root{
     --paper:#f6efdc;
     --paper-2:#efe6cd;
     --line:#d8c9a3;
@@ -432,5 +432,17 @@
     font:inherit; font-weight:700; padding:7px 13px; border-radius:12px 4px 12px 4px; cursor:pointer;
   }
   .toast button[hidden]{display:none;}
+
+  /* ---------- แชร์ ---------- */
+  .share-btn{margin-left:auto; flex:none; font-size:13px; padding:5px 12px;}
+  .share-btn[hidden], .copy-row[hidden]{display:none;}
+  .copy-row{display:flex; justify-content:flex-end; margin-top:6px;}
+  .linkbtn.plain{color:var(--blue);}
+  .head-actions{display:flex; gap:8px; flex:none;}
+  .foot-link{text-align:center; margin:2px 0 8px;}
+  .foot-link .linkbtn{font-size:13px; font-weight:500;}
+  #imgPreview{z-index:58;}
+  .preview-img{width:100%; display:block; border-radius:8px; border:1.5px solid var(--line);}
+  .preview-hint{font-size:13px; color:var(--ink-soft); text-align:center; margin:0 0 10px;}
 
   @media (prefers-reduced-motion: reduce){ *{transition:none !important;} }

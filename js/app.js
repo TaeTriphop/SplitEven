@@ -373,6 +373,9 @@ function personHtml(name, cls, role){
 function renderSettlements(){
   const wrap = el('settlements');
   wrap.innerHTML='';
+  const hasExp = state.members.length>0 && state.expenses.length>0;
+  el('shareImgBtn').hidden = !hasExp;
+  el('copyRow').hidden = !hasExp || computeSettlements().length===0;
   if(state.members.length===0 || state.expenses.length===0){
     wrap.innerHTML = '<div class="empty">ยังไม่มีอะไรให้เคลียร์หนี้ เพิ่มรายจ่ายก่อนนะ</div>';
     return;
@@ -485,7 +488,7 @@ function toggleHistory(force){
   el('histBody').hidden = !open;
 }
 
-function settleCurrentRound(){
+function buildSnapshot(){
   const {paid, owed} = computeBalances();
   const involved = state.members.filter(m=>
     state.expenses.some(e=> e.paidBy===m || e.participants.includes(m)));
@@ -501,7 +504,11 @@ function settleCurrentRound(){
     settlements: computeSettlements(),
     perPerson: involved.map(name=>({name, paid:r2(paid[name]||0), share:r2(owed[name]||0)}))
   };
+  return snapshot;
+}
 
+function settleCurrentRound(){
+  const snapshot = buildSnapshot();
   const prevExpenses = state.expenses;
   tripHistory.unshift(snapshot);
   const pruned = tripHistory.length > MAX_HISTORY ? tripHistory.splice(MAX_HISTORY) : [];
@@ -575,6 +582,7 @@ function openHistory(id){
     </div>
     <div class="sh-title">ใครโอนให้ใคร</div>
     ${transfers}
+    ${h.settlements.length ? '<div class="copy-row"><button class="linkbtn plain" id="sheetCopy">คัดลอกยอดโอน</button></div>' : ''}
     <div class="sh-title">แต่ละคน</div>
     <div class="pp-head"><span>ชื่อ</span><span>ออกไป</span><span>ส่วนของตัวเอง</span></div>
     ${people}
@@ -584,12 +592,320 @@ function openHistory(id){
       <button class="btn danger block" id="sheetDelete">ลบทริปนี้ออกจากประวัติ</button>
     </div>`;
   el('sheetDelete').addEventListener('click', ()=> deleteHistory(id));
+  if(el('sheetCopy')) el('sheetCopy').addEventListener('click', ()=> copyTransfers(h));
   el('sheetBody').scrollTop = 0;
 
   el('histSheet').classList.add('show');
   el('histSheet').setAttribute('aria-hidden','false');
   document.body.style.overflow = 'hidden';
   setTimeout(()=> el('sheetClose').focus(), 50);
+}
+
+/* ---------- แชร์เป็นรูป / คัดลอกยอดโอน ---------- */
+const SHARE_FONT_TEXT = 'กขคทริปยอด฿0123456789abc';
+if(document.fonts && document.fonts.load){
+  Promise.all([
+    document.fonts.load('400 16px Mali', SHARE_FONT_TEXT),
+    document.fonts.load('500 16px Mali', SHARE_FONT_TEXT),
+    document.fonts.load('700 16px Mali', SHARE_FONT_TEXT),
+    document.fonts.load('20px Chonburi', SHARE_FONT_TEXT)
+  ]).catch(()=>{});
+}
+
+function transfersText(snap){
+  if(!snap.settlements.length) return `${snap.tripName}\nจ่ายลงตัวพอดี ไม่ต้องโอนใคร`;
+  return [`${snap.tripName} ยอดโอน`]
+    .concat(snap.settlements.map(s=>`${s.from} ➜ ${s.to} ฿${fmt(s.amount)}`))
+    .join('\n');
+}
+function copyText(text){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    return navigator.clipboard.writeText(text).then(()=>true).catch(()=>legacyCopy(text));
+  }
+  return Promise.resolve(legacyCopy(text));
+}
+function legacyCopy(text){
+  try{
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly','');
+    ta.style.position='fixed'; ta.style.top='-1000px'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  }catch(e){ return false; }
+}
+function copyTransfers(snap){
+  copyText(transfersText(snap)).then(ok=>{
+    showToast(ok ? 'คัดลอกยอดโอนแล้ว วางในไลน์ได้เลย' : 'คัดลอกไม่ได้ในเบราว์เซอร์นี้');
+  });
+}
+
+const SC = {
+  paper:'#f6efdc', line:'#dccfae', ink:'#2e2a22', soft:'#6b6252',
+  owe:'#c1443c', card:'#fffdf6', row:'#f3ead3', dash:'#d8c9a3', tape:'rgba(243,211,92,0.9)'
+};
+function rrect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r, y); ctx.lineTo(x+w-r, y); ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+// ตัดคำภาษาไทยให้ถูก: ใช้ Intl.Segmenter ถ้ามี ไม่งั้นแยกตามตัวอักษร (ไม่แยกสระ/วรรณยุกต์ออกจากพยัญชนะ)
+function segments(text, granularity){
+  try{
+    if(window.Intl && Intl.Segmenter){
+      return Array.from(new Intl.Segmenter('th', {granularity}).segment(text), x=>x.segment);
+    }
+  }catch(e){}
+  return String(text).match(/.[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E\u200d\ufe0f]*/gsu) || [];
+}
+function fitText(ctx, text, maxW){
+  text = String(text);
+  if(ctx.measureText(text).width <= maxW) return text;
+  let chars = segments(text, 'grapheme');
+  while(chars.length && ctx.measureText(chars.join('')+'…').width > maxW) chars.pop();
+  return chars.join('') + '…';
+}
+function wrapText(ctx, text, maxW, maxLines){
+  const chars = segments(String(text), 'word');
+  const lines = []; let cur = '';
+  for(const ch of chars){
+    if(ctx.measureText(cur+ch).width > maxW && cur){ lines.push(cur); cur = ch; }
+    else cur += ch;
+  }
+  if(cur) lines.push(cur);
+  if(lines.length > maxLines){
+    const rest = lines.slice(maxLines-1).join('');
+    lines.length = maxLines-1;
+    lines.push(fitText(ctx, rest, maxW));
+  }
+  return lines;
+}
+function hLine(ctx, x0, x1, y){
+  ctx.save(); ctx.strokeStyle = SC.dash; ctx.lineWidth = 1.2; ctx.setLineDash([5,4]);
+  ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke(); ctx.restore();
+}
+
+// วาดการ์ดสรุป; ถ้าไม่ส่ง H มา = รอบวัดความสูง
+function drawShareCard(ctx, snap, H){
+  const W = 400, M = 16, P = 18;
+  const x0 = M + P, x1 = W - M - P, cw = x1 - x0;
+  const cardTop = M + 12;
+  const draw = !!H;
+  const MAX_EXP = 8;
+  const F = (w, px, fam) => fam==='h' ? `${px}px Chonburi, Mali, serif` : `${w} ${px}px Mali, sans-serif`;
+  const emo = {}; snap.members.forEach(m=>{ emo[m.name] = m.emoji; });
+
+  if(draw){
+    ctx.fillStyle = SC.paper; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = SC.line; ctx.lineWidth = 1;
+    for(let ly = 27.5; ly < H; ly += 28){ ctx.beginPath(); ctx.moveTo(0, ly); ctx.lineTo(W, ly); ctx.stroke(); }
+    const cardH = H - cardTop - 40;
+    rrect(ctx, M, cardTop, W - 2*M, cardH, 16);
+    ctx.fillStyle = SC.card; ctx.fill();
+    ctx.lineWidth = 2.5; ctx.strokeStyle = SC.ink; ctx.stroke();
+    ctx.save(); ctx.translate(W/2, cardTop); ctx.rotate(-0.05);
+    ctx.fillStyle = SC.tape; ctx.fillRect(-40, -11, 80, 22); ctx.restore();
+  }
+  ctx.textBaseline = 'middle';
+  let y = cardTop + P + 8;
+
+  // ชื่อทริป
+  ctx.font = F(0, 23, 'h');
+  const titleLines = wrapText(ctx, snap.tripName, cw, 2);
+  titleLines.forEach(t=>{ if(draw){ ctx.fillStyle = SC.ink; ctx.textAlign='left'; ctx.fillText(t, x0, y + 15); } y += 34; });
+  ctx.font = F(500, 13);
+  if(draw){ ctx.fillStyle = SC.soft; ctx.fillText(snap.dateLabel, x0, y + 8); }
+  y += 26;
+
+  // กล่องสถิติ
+  const sh = 58, cols = [0.42, 0.29, 0.29];
+  const stats = [[`฿${fmt(snap.total)}`, 'ยอดรวม'], [String(snap.expenses.length), 'รายการ'], [String(snap.members.length), 'คน']];
+  if(draw){
+    rrect(ctx, x0, y, cw, sh, 12); ctx.lineWidth = 2; ctx.strokeStyle = SC.ink; ctx.stroke();
+    let cx = x0;
+    stats.forEach((st, i)=>{
+      const w = cw * cols[i];
+      if(i>0){ ctx.save(); ctx.strokeStyle = SC.dash; ctx.setLineDash([4,4]); ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(cx, y+8); ctx.lineTo(cx, y+sh-8); ctx.stroke(); ctx.restore(); }
+      ctx.textAlign = 'center'; ctx.fillStyle = SC.ink; ctx.font = F(700, 19);
+      ctx.fillText(fitText(ctx, st[0], w-8), cx + w/2, y + 23);
+      ctx.fillStyle = SC.soft; ctx.font = F(500, 11.5);
+      ctx.fillText(st[1], cx + w/2, y + 44);
+      cx += w;
+    });
+  }
+  y += sh;
+
+  const section = (t)=>{
+    y += 22;
+    ctx.font = F(0, 16, 'h');
+    if(draw){ ctx.textAlign='left'; ctx.fillStyle = SC.ink; ctx.fillText(t, x0, y + 10); }
+    y += 30;
+  };
+
+  // ใครโอนให้ใคร
+  section('ใครโอนให้ใคร');
+  if(!snap.settlements.length){
+    ctx.font = F(500, 14);
+    if(draw){ ctx.fillStyle = SC.soft; ctx.textAlign='left'; ctx.fillText('จ่ายลงตัวพอดี ไม่ต้องโอนใคร 🎉', x0, y + 12); }
+    y += 26;
+  }
+  snap.settlements.forEach(st=>{
+    const rh = 46;
+    if(draw){
+      rrect(ctx, x0, y, cw, rh, 12); ctx.fillStyle = SC.row; ctx.fill();
+      ctx.font = F(700, 17); ctx.textAlign = 'right'; ctx.fillStyle = SC.owe;
+      const amt = `฿${fmt(st.amount)}`;
+      const amtW = ctx.measureText(amt).width;
+      ctx.fillText(amt, x1 - 12, y + rh/2);
+      const arrowW = 30, emoW = 25;
+      const side = (cw - 24 - amtW - 14 - arrowW) / 2;
+      ctx.font = F(700, 15);
+      const fromName = fitText(ctx, st.from, Math.max(20, side - emoW));
+      const toName = fitText(ctx, st.to, Math.max(20, side - emoW));
+      const person = (name, label, px)=>{
+        ctx.textAlign = 'left'; ctx.font = F(400, 17); ctx.fillStyle = SC.ink;
+        ctx.fillText(emo[name] || '🙂', px, y + rh/2);
+        ctx.font = F(700, 15);
+        ctx.fillText(label, px + emoW, y + rh/2);
+        return px + emoW + ctx.measureText(label).width;
+      };
+      const afterFrom = person(st.from, fromName, x0 + 12);
+      ctx.textAlign='center'; ctx.font = F(700, 16); ctx.fillStyle = SC.soft;
+      ctx.fillText('→', afterFrom + arrowW/2, y + rh/2);
+      person(st.to, toName, afterFrom + arrowW);
+    }
+    y += rh + 8;
+  });
+  y -= 8;
+
+  // แต่ละคน
+  section('แต่ละคน');
+  const colShare = x1, colPaid = x1 - 104;
+  ctx.font = F(500, 11.5);
+  if(draw){
+    ctx.fillStyle = SC.soft; ctx.textAlign = 'right';
+    ctx.fillText('ออกไป', colPaid, y + 6); ctx.fillText('ส่วนของตัวเอง', colShare, y + 6);
+  }
+  y += 16;
+  snap.perPerson.forEach((pp, i)=>{
+    const rh = 32;
+    if(draw){
+      if(i>0) hLine(ctx, x0, x1, y);
+      ctx.textAlign='left'; ctx.fillStyle = SC.ink; ctx.font = F(400, 15);
+      ctx.fillText(emo[pp.name] || '🙂', x0, y + rh/2);
+      ctx.font = F(700, 14.5);
+      ctx.fillText(fitText(ctx, pp.name, colPaid - 70 - x0 - 24), x0 + 23, y + rh/2);
+      ctx.textAlign='right'; ctx.font = F(500, 14);
+      ctx.fillText(`฿${fmt(pp.paid)}`, colPaid, y + rh/2);
+      ctx.fillText(`฿${fmt(pp.share)}`, colShare, y + rh/2);
+    }
+    y += rh;
+  });
+
+  // รายจ่าย
+  section('รายจ่ายทั้งหมด');
+  const everyone = snap.members.length;
+  snap.expenses.slice(0, MAX_EXP).forEach((e, i)=>{
+    const rh = 46;
+    if(draw){
+      if(i>0) hLine(ctx, x0, x1, y);
+      ctx.font = F(700, 14.5); ctx.textAlign='right'; ctx.fillStyle = SC.ink;
+      const amt = `฿${fmt(e.amount)}`;
+      const amtW = ctx.measureText(amt).width;
+      ctx.fillText(amt, x1, y + 16);
+      ctx.textAlign='left';
+      ctx.fillText(fitText(ctx, e.desc, cw - amtW - 14), x0, y + 16);
+      ctx.font = F(400, 12); ctx.fillStyle = SC.soft;
+      const who = e.participants.length===everyone ? 'หารทุกคน' : `หาร ${e.participants.length} คน (${e.participants.join(', ')})`;
+      ctx.fillText(fitText(ctx, `${e.paidBy} ออกให้ก่อน, ${who}`, cw), x0, y + 34);
+    }
+    y += rh;
+  });
+  if(snap.expenses.length > MAX_EXP){
+    ctx.font = F(500, 13);
+    if(draw){ hLine(ctx, x0, x1, y); ctx.fillStyle = SC.soft; ctx.textAlign='left'; ctx.fillText(`+ อีก ${snap.expenses.length - MAX_EXP} รายการ`, x0, y + 16); }
+    y += 30;
+  }
+
+  y += P;           // ขอบล่างการ์ด
+  const cardBottom = y;
+  ctx.font = F(500, 12);
+  if(draw){ ctx.fillStyle = SC.soft; ctx.textAlign='center'; ctx.fillText('หารเท่า · ใครออกเงินไปก่อน เดี๋ยวคิดให้เอง', W/2, cardBottom + 20); }
+  return cardBottom + 40;
+}
+
+function renderShareCanvas(snap){
+  const S = 2.5, W = 400;
+  const probe = document.createElement('canvas'); probe.width = 1; probe.height = 1;
+  const H = Math.ceil(drawShareCard(probe.getContext('2d'), snap));
+  const c = document.createElement('canvas');
+  c.width = Math.round(W * S); c.height = Math.round(H * S);
+  const ctx = c.getContext('2d');
+  ctx.scale(S, S);
+  drawShareCard(ctx, snap, H);
+  return c;
+}
+function dataUrlToFile(dataUrl, name){
+  const [head, b64] = dataUrl.split(',');
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
+  return new File([arr], name, {type: head.match(/:(.*?);/)[1]});
+}
+function shareFileName(){
+  const d = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  return `hantao-${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}.png`;
+}
+
+function shareImage(snap){
+  let dataUrl;
+  try{ dataUrl = renderShareCanvas(snap).toDataURL('image/png'); }
+  catch(e){ console.warn(e); showToast('สร้างรูปไม่สำเร็จ ลองใหม่อีกครั้งนะ'); return; }
+  const name = shareFileName();
+  let file = null;
+  try{ file = dataUrlToFile(dataUrl, name); }catch(e){}
+  if(file && navigator.canShare && navigator.share){
+    let can = false;
+    try{ can = navigator.canShare({files:[file]}); }catch(e){}
+    if(can){
+      navigator.share({files:[file], title:snap.tripName}).catch(err=>{
+        if(err && err.name === 'AbortError') return;   // ผู้ใช้กดยกเลิกเอง
+        openPreview(dataUrl, name);
+      });
+      return;
+    }
+  }
+  openPreview(dataUrl, name);
+}
+
+function openPreview(dataUrl, name){
+  el('previewImg').src = dataUrl;
+  const a = el('previewDownload');
+  a.href = dataUrl; a.download = name;
+  el('imgPreview').classList.add('show');
+  el('imgPreview').setAttribute('aria-hidden','false');
+  document.body.style.overflow = 'hidden';
+}
+function closePreview(){
+  el('imgPreview').classList.remove('show');
+  el('imgPreview').setAttribute('aria-hidden','true');
+  if(!openHistoryId) document.body.style.overflow = '';
+}
+
+function currentShareSnapshot(){
+  const snap = buildSnapshot();
+  snap.dateLabel = 'สรุป ณ ' + new Date().toLocaleDateString('th-TH', {weekday:'short', day:'numeric', month:'short', year:'numeric'});
+  return snap;
+}
+function historyShareSnapshot(h){
+  return Object.assign({}, h, {
+    dateLabel: 'เคลียร์เมื่อ ' + new Date(h.settledAt).toLocaleDateString('th-TH', {weekday:'short', day:'numeric', month:'short', year:'numeric'})
+  });
 }
 
 function closeHistory(){
@@ -664,11 +980,20 @@ document.querySelectorAll('nav.tabs button').forEach(btn=>{
 });
 
 el('histToggle').addEventListener('click', ()=> toggleHistory());
+el('shareImgBtn').addEventListener('click', ()=>{ if(state.expenses.length) shareImage(currentShareSnapshot()); });
+el('copyTransfersBtn').addEventListener('click', ()=>{ if(state.expenses.length) copyTransfers(buildSnapshot()); });
+el('sheetShare').addEventListener('click', ()=>{
+  const h = tripHistory.find(x=>x.id===openHistoryId);
+  if(h) shareImage(historyShareSnapshot(h));
+});
+el('previewClose').addEventListener('click', closePreview);
+el('imgPreview').addEventListener('click', e=>{ if(e.target===el('imgPreview')) closePreview(); });
 el('sheetClose').addEventListener('click', closeHistory);
 el('histSheet').addEventListener('click', e=>{ if(e.target===el('histSheet')) closeHistory(); });
 document.addEventListener('keydown', e=>{
   if(e.key!=='Escape') return;
   if(el('confirmModal').classList.contains('show')) hideConfirm();
+  else if(el('imgPreview').classList.contains('show')) closePreview();
   else if(openHistoryId) closeHistory();
 });
 el('histClearAll').addEventListener('click', ()=>{
