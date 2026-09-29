@@ -1,5 +1,58 @@
-const COLORS = ['#c1443c','#3f5a7d','#2f7d5a','#a8752f','#7a4f9e','#c47a2b','#3d7d7d','#8a4a6a'];
-const EMOJIS = ['😀','😎','🤓','🥳','😺','🐶','🐱','🐼','🦊','🐵','🐧','🐸','🦁','🐯','🐨','🐷','🐰','🦄','🐔','🐙','🦉','🐝','🐢','🐳','🦋','🧑\u200d🚀','🧑\u200d🎤','🧑\u200d🍳','🧑\u200d🎨','🥷','🧙','🧑\u200d💻','🕵️','🤠','🥸'];
+const COLORS = [
+  '#c1443c',
+  '#3f5a7d',
+  '#2f7d5a',
+  '#a8752f',
+  '#7a4f9e',
+  '#c47a2b',
+  '#39758a',
+  '#8a4a6a',
+  '#9b5c4d',
+  '#526b82',
+  '#7b8240',
+  '#56866f',
+  '#6b5a82',
+  '#b96545',
+  '#7d5365',
+  '#8c6a4f',
+  '#596d5b',
+  '#6a6280',
+  '#a65f54',
+  '#44627a',
+  '#9a7048',
+  '#75506e',
+];
+const EMOJIS = [
+  // 😄 Faces
+  '😀','😎','🤓','🥳','😺','😸','😻','😹','😽','🙈',
+  '🤭','😊','😆','😋','🥰','😍','🤩','😴','🤗','😜',
+
+  // 🐶 Animals
+  '🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯',
+  '🦁','🐮','🐷','🐸','🐵','🐧','🐦','🐤','🦆','🦉',
+  '🐺','🐗','🐙','🦀','🐢','🐳','🐬','🦋','🐝','🐞',
+
+  // 🌸 Cute / Nature
+  '🌸','🌷','🌻','🌹','🌺','🌼','🍀','🌿','🌱','🌵',
+  '🍄','🌈','☀️','🌙','⭐','✨','🌟','💫','🌙','☁️',
+
+  // 🍓 Food
+  '🍎','🍊','🍋','🍉','🍇','🍓','🍒','🍑','🥝','🍍',
+  '🥑','🍕','🍔','🍟','🍩','🍪','🍰','🧁','🍭','🍬',
+
+  // 🎨 Things / Hobbies
+  '🎨','🎸','🎮','🎧','📚','✏️','🖌️','🎵','🎶','📷',
+  '⚽','🏀','🎾','🏆','🎯','🧩','🎲','🧸','🎁','💡',
+
+  // 👨‍🚀 Characters
+  '🧑‍🚀','🧑‍🎤','🧑‍🍳','🧑‍🎨','🥷','🧙','🧑‍💻','🕵️',
+  '🤠','🥸','🧚','🧜','🧝','🧞','🦸','🦹',
+
+  // 💖 Cute objects
+  '❤️','🧡','💛','💚','💙','💜','🩷','🤍','🖤',
+  '💖','💗','💓','💞','💕','💝','💘','💌','🎀','🫶'
+];
+
 function colorFor(name, members){
   const idx = members.indexOf(name);
   return COLORS[(idx>=0?idx:0) % COLORS.length];
@@ -30,6 +83,61 @@ let state = {
   currentParticipants: null,
   memberEmoji: {}
 };
+
+/* ---------- localStorage ---------- */
+const KEY_CURRENT = 'hantao:v1:current';
+const KEY_HISTORY = 'hantao:v1:history';
+const MAX_HISTORY = 20;
+
+function loadJSON(key, fallback){
+  try{
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  }catch(e){ return fallback; }
+}
+function saveJSON(key, value){
+  try{ localStorage.setItem(key, JSON.stringify(value)); return true; }
+  catch(e){ console.warn('save failed', key, e); return false; }
+}
+
+// โหลดรอบปัจจุบัน
+(function loadCurrent(){
+  const saved = loadJSON(KEY_CURRENT, null);
+  if(saved && Array.isArray(saved.members) && Array.isArray(saved.expenses)){
+    state = {
+      tripName: typeof saved.tripName==='string' ? saved.tripName : state.tripName,
+      members: saved.members,
+      expenses: saved.expenses,
+      currentParticipants: Array.isArray(saved.currentParticipants) ? saved.currentParticipants : null,
+      memberEmoji: saved.memberEmoji || {}
+    };
+  }
+})();
+
+// โหลดประวัติ
+let tripHistory = loadJSON(KEY_HISTORY, []);
+if(!Array.isArray(tripHistory)) tripHistory = [];
+
+// บันทึกรอบปัจจุบันแบบหน่วงเวลาเล็กน้อย จะได้ไม่เขียนทุกครั้งที่พิมพ์
+let saveTimer = null;
+function scheduleSave(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(saveCurrentNow, 250);
+}
+function saveCurrentNow(){
+  clearTimeout(saveTimer);
+  saveJSON(KEY_CURRENT, state);
+}
+function saveHistory(){ saveJSON(KEY_HISTORY, tripHistory); }
+window.addEventListener('pagehide', saveCurrentNow);
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='hidden') saveCurrentNow(); });
+
+let persistAsked = false;
+function askPersist(){
+  if(persistAsked) return;
+  persistAsked = true;
+  try{ if(navigator.storage && navigator.storage.persist) navigator.storage.persist(); }catch(e){}
+}
 
 function ensureParticipantsDefault(){
   if(!state.currentParticipants){
@@ -307,6 +415,202 @@ function renderAll(){
   el('settleBtn').disabled = state.expenses.length===0;
   const n = state.expenses.length ? computeSettlements().length : 0;
   el('settleBadge').textContent = n ? String(n) : '';
+  renderHistory();
+  scheduleSave();
+}
+
+/* ---------- toast ---------- */
+let toastTimer = null;
+function showToast(message, actionLabel, action){
+  el('toastMsg').textContent = message;
+  const btn = el('toastAction');
+  if(actionLabel){
+    btn.textContent = actionLabel;
+    btn.hidden = false;
+    btn.onclick = ()=>{ hideToast(); action(); };
+  } else {
+    btn.hidden = true;
+    btn.onclick = null;
+  }
+  el('toast').classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, actionLabel ? 6000 : 2500);
+}
+function hideToast(){
+  clearTimeout(toastTimer);
+  el('toast').classList.remove('show');
+}
+
+/* ---------- ประวัติทริป ---------- */
+function fmtDate(ts){
+  return new Date(ts).toLocaleDateString('th-TH', {day:'numeric', month:'short', year:'2-digit'});
+}
+function facesHtml(members, max){
+  max = max || 5;
+  const shown = members.slice(0, max).map(m=>`<span>${m.emoji}</span>`).join('');
+  const extra = members.length > max ? `<span class="more">+${members.length-max}</span>` : '';
+  return `<span class="faces" aria-label="${members.length} คน">${shown}${extra}</span>`;
+}
+
+function renderHistory(){
+  el('histCount').textContent = tripHistory.length;
+  const list = el('histList');
+  list.innerHTML = '';
+  if(tripHistory.length===0){
+    list.innerHTML = '<div class="empty small">ยังไม่มีทริปที่เคลียร์แล้ว<br>กด "ยืนยันเคลียร์บิล" เมื่อไร ทริปจะมาเก็บไว้ตรงนี้</div>';
+    el('histFoot').hidden = true;
+    return;
+  }
+  el('histFoot').hidden = false;
+  el('histCap').textContent = `เก็บไว้ ${tripHistory.length}/${MAX_HISTORY} ทริป เกินนี้ทริปเก่าสุดจะถูกลบเอง`;
+  tripHistory.forEach(h=>{
+    const b = document.createElement('button');
+    b.className = 'hist-item';
+    b.innerHTML = `
+      <div style="min-width:0">
+        <div class="hi-name">${esc(h.tripName)}</div>
+        <div class="hi-meta"><span>${fmtDate(h.settledAt)}</span>${facesHtml(h.members)}</div>
+      </div>
+      <div class="hi-amt">฿${fmt(h.total)}</div>
+      <span class="hi-chev" aria-hidden="true">›</span>`;
+    b.addEventListener('click', ()=> openHistory(h.id));
+    list.appendChild(b);
+  });
+}
+
+function toggleHistory(force){
+  const btn = el('histToggle');
+  const open = typeof force==='boolean' ? force : btn.getAttribute('aria-expanded')!=='true';
+  btn.setAttribute('aria-expanded', String(open));
+  el('histBody').hidden = !open;
+}
+
+function settleCurrentRound(){
+  const {paid, owed} = computeBalances();
+  const involved = state.members.filter(m=>
+    state.expenses.some(e=> e.paidBy===m || e.participants.includes(m)));
+  const r2 = n => Math.round(n*100)/100;
+  const snapshot = {
+    v: 1,
+    id: 'h' + Date.now() + Math.random().toString(36).slice(2,6),
+    settledAt: Date.now(),
+    tripName: (state.tripName||'').trim() || 'ทริปไม่มีชื่อ',
+    members: involved.map(name=>({name, emoji:getEmoji(name)})),
+    expenses: state.expenses.map(e=>({desc:e.desc, amount:e.amount, paidBy:e.paidBy, participants:[...e.participants]})),
+    total: r2(state.expenses.reduce((s,e)=>s+e.amount, 0)),
+    settlements: computeSettlements(),
+    perPerson: involved.map(name=>({name, paid:r2(paid[name]||0), share:r2(owed[name]||0)}))
+  };
+
+  const prevExpenses = state.expenses;
+  tripHistory.unshift(snapshot);
+  const pruned = tripHistory.length > MAX_HISTORY ? tripHistory.splice(MAX_HISTORY) : [];
+  saveHistory();
+  askPersist();
+
+  state.expenses = [];
+  renderAll();
+  saveCurrentNow();
+
+  const msg = pruned.length
+    ? `เก็บ "${snapshot.tripName}" แล้ว และลบทริปเก่าสุด "${pruned[0].tripName}" ออก`
+    : `เก็บ "${snapshot.tripName}" ไว้ในทริปที่เคลียร์แล้ว`;
+  showToast(msg, 'เลิกทำ', ()=>{
+    tripHistory = tripHistory.filter(h=>h.id!==snapshot.id).concat(pruned);
+    state.expenses = prevExpenses;
+    saveHistory();
+    renderAll();
+    saveCurrentNow();
+    showToast('ย้อนกลับแล้ว รายจ่ายกลับมาครบ');
+  });
+}
+
+let openHistoryId = null;
+function openHistory(id){
+  const h = tripHistory.find(x=>x.id===id);
+  if(!h) return;
+  openHistoryId = id;
+  const emo = {};
+  h.members.forEach(m=>{ emo[m.name] = m.emoji; });
+  const face = name => `<span class="dot sm">${emo[name]||'🙂'}</span>`;
+  const everyone = h.members.length;
+
+  el('sheetTitle').textContent = h.tripName;
+  el('sheetDate').textContent = 'เคลียร์เมื่อ ' + new Date(h.settledAt).toLocaleDateString('th-TH', {weekday:'short', day:'numeric', month:'long', year:'numeric'});
+
+  const transfers = h.settlements.length
+    ? h.settlements.map(s=>`
+        <div class="mt">
+          <div class="p">${face(s.from)}<span class="n">${esc(s.from)}</span></div>
+          <span class="arr">→</span>
+          <div class="p">${face(s.to)}<span class="n">${esc(s.to)}</span></div>
+          <span class="a">฿${fmt(s.amount)}</span>
+        </div>`).join('')
+    : '<div class="empty small">ทริปนี้จ่ายลงตัวพอดี ไม่มีใครต้องโอน</div>';
+
+  const people = h.perPerson.map(p=>`
+      <div class="pp">
+        <div class="p">${face(p.name)}<span class="n">${esc(p.name)}</span></div>
+        <span class="num">฿${fmt(p.paid)}</span>
+        <span class="num">฿${fmt(p.share)}</span>
+      </div>`).join('');
+
+  const expenses = h.expenses.map(e=>{
+    const who = e.participants.length===everyone ? `หารทุกคน` : `หาร ${e.participants.length} คน: ${e.participants.map(esc).join(', ')}`;
+    return `
+      <div class="ex">
+        <div class="l">
+          <div class="d">${esc(e.desc)}</div>
+          <div class="s">${emo[e.paidBy]||''} ${esc(e.paidBy)} ออกให้ก่อน, ${who}</div>
+        </div>
+        <span class="a">฿${fmt(e.amount)}</span>
+      </div>`;
+  }).join('');
+
+  el('sheetBody').innerHTML = `
+    <div class="stats">
+      <div><b>฿${fmt(h.total)}</b><small>ยอดรวม</small></div>
+      <div><b>${h.expenses.length}</b><small>รายการ</small></div>
+      <div><b>${everyone}</b><small>คน</small></div>
+    </div>
+    <div class="sh-title">ใครโอนให้ใคร</div>
+    ${transfers}
+    <div class="sh-title">แต่ละคน</div>
+    <div class="pp-head"><span>ชื่อ</span><span>ออกไป</span><span>ส่วนของตัวเอง</span></div>
+    ${people}
+    <div class="sh-title">รายจ่ายทั้งหมด</div>
+    ${expenses}
+    <div class="sheet-actions">
+      <button class="btn danger block" id="sheetDelete">ลบทริปนี้ออกจากประวัติ</button>
+    </div>`;
+  el('sheetDelete').addEventListener('click', ()=> deleteHistory(id));
+  el('sheetBody').scrollTop = 0;
+
+  el('histSheet').classList.add('show');
+  el('histSheet').setAttribute('aria-hidden','false');
+  document.body.style.overflow = 'hidden';
+  setTimeout(()=> el('sheetClose').focus(), 50);
+}
+
+function closeHistory(){
+  el('histSheet').classList.remove('show');
+  el('histSheet').setAttribute('aria-hidden','true');
+  document.body.style.overflow = '';
+  openHistoryId = null;
+}
+
+function deleteHistory(id){
+  const idx = tripHistory.findIndex(h=>h.id===id);
+  if(idx<0) return;
+  const [removed] = tripHistory.splice(idx, 1);
+  saveHistory();
+  closeHistory();
+  renderHistory();
+  showToast(`ลบ "${removed.tripName}" แล้ว`, 'เลิกทำ', ()=>{
+    tripHistory.splice(Math.min(idx, tripHistory.length), 0, removed);
+    saveHistory();
+    renderHistory();
+  });
 }
 
 let pendingConfirmAction = null;
@@ -331,10 +635,10 @@ el('confirmOk').addEventListener('click', ()=>{
 el('addMemberBtn').addEventListener('click', addMember);
 el('memberInput').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); addMember(); }});
 el('addExpenseBtn').addEventListener('click', addExpense);
-el('tripName').addEventListener('input', e=>{ state.tripName = e.target.value; });
+el('tripName').addEventListener('input', e=>{ state.tripName = e.target.value; scheduleSave(); });
 
 el('resetBtn').addEventListener('click', ()=>{
-  showConfirm('ล้างข้อมูลทริปนี้ทั้งหมดเลยนะ ชื่อเพื่อนและรายจ่ายทุกอย่างจะหายหมด ย้อนกลับไม่ได้ แน่ใจไหม?', ()=>{
+  showConfirm('ล้างทริปที่กำลังทำอยู่ทั้งหมดเลยนะ ชื่อเพื่อนและรายจ่ายรอบนี้จะหายหมด ย้อนกลับไม่ได้ (ทริปที่เคลียร์แล้วยังอยู่ครบ) แน่ใจไหม?', ()=>{
     state = { tripName:'ทริปเที่ยวของเรา', members:[], expenses:[], currentParticipants:[], memberEmoji:{} };
     el('tripName').value = state.tripName;
     renderAll();
@@ -343,10 +647,7 @@ el('resetBtn').addEventListener('click', ()=>{
 
 el('settleBtn').addEventListener('click', ()=>{
   if(state.expenses.length===0) return;
-  showConfirm('ยืนยันว่าทุกคนโอนเงินกันครบตามรายการด้านบนแล้วใช่ไหม? การกดยืนยันจะล้างรายการรายจ่ายทั้งหมดเพื่อเริ่มรอบใหม่ (รายชื่อเพื่อนยังอยู่เหมือนเดิม)', ()=>{
-    state.expenses = [];
-    renderAll();
-  }, 'ยืนยันเคลียร์บิล');
+  showConfirm('ทุกคนโอนกันครบแล้วใช่ไหม? ทริปนี้จะย้ายไปเก็บใน "ทริปที่เคลียร์แล้ว" (เปิดดูย้อนหลังได้) แล้วเริ่มรอบใหม่ รายชื่อเพื่อนยังอยู่เหมือนเดิม', settleCurrentRound, 'เคลียร์บิล');
 });
 
 document.querySelectorAll('nav.tabs button').forEach(btn=>{
@@ -362,4 +663,22 @@ document.querySelectorAll('nav.tabs button').forEach(btn=>{
   });
 });
 
+el('histToggle').addEventListener('click', ()=> toggleHistory());
+el('sheetClose').addEventListener('click', closeHistory);
+el('histSheet').addEventListener('click', e=>{ if(e.target===el('histSheet')) closeHistory(); });
+document.addEventListener('keydown', e=>{
+  if(e.key!=='Escape') return;
+  if(el('confirmModal').classList.contains('show')) hideConfirm();
+  else if(openHistoryId) closeHistory();
+});
+el('histClearAll').addEventListener('click', ()=>{
+  showConfirm(`ลบประวัติทริปที่เคลียร์แล้วทั้งหมด ${tripHistory.length} ทริปเลยนะ ย้อนกลับไม่ได้ แน่ใจไหม?`, ()=>{
+    tripHistory = [];
+    saveHistory();
+    renderHistory();
+    showToast('ลบประวัติทั้งหมดแล้ว');
+  }, 'ลบทั้งหมด');
+});
+
+el('tripName').value = state.tripName;
 renderAll();

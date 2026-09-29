@@ -3,18 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>หารเท่า - Split Even</title>
+<title>ออกก่อน จ่ายทีหลัง</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chonburi&family=Mali:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 </head>
 <body>
 <div class="wrap">
 
   <header class="top">
-    <h1>หารเท่า</h1>
-    <div class="sub">ใครออกเงินไปก่อน เดี๋ยวคิดให้เอง</div>
+    <h1>ออกก่อน จ่ายทีหลัง</h1>
+    <div class="sub">ใครออกเงินไปก่อน ก็ระวังโดนบิด</div>
   </header>
 
   <div class="sketchy">
@@ -61,8 +63,24 @@
       <div class="sec-title"><span class="num">4</span> ใครจ่ายให้ใคร</div>
       <div id="settlements"></div>
       <button class="btn primary block" id="settleBtn">✅ ยืนยันเคลียร์บิลแล้ว</button>
-      <div class="hint">กดปุ่มนี้เมื่อทุกคนโอนเงินกันครบตามด้านบนแล้วเท่านั้น ระบบจะเริ่มรอบรายจ่ายใหม่ให้</div>
+      <div class="hint">กดเมื่อทุกคนโอนกันครบแล้ว ทริปนี้จะถูกเก็บไว้ใน "ทริปที่เคลียร์แล้ว" ด้านล่าง แล้วเริ่มรอบใหม่ให้</div>
     </div>
+
+    <div class="sketchy">
+      <button class="hist-toggle" id="histToggle" aria-expanded="false" aria-controls="histBody">
+        <span class="sec-title"><span class="ic">🗂️</span> ทริปที่เคลียร์แล้ว</span>
+        <span class="hist-count" id="histCount">0</span>
+        <span class="chev">▼</span>
+      </button>
+      <div class="hist-body" id="histBody" hidden>
+        <div id="histList"></div>
+        <div class="hist-foot" id="histFoot">
+          <span id="histCap"></span>
+          <button class="linkbtn" id="histClearAll">ลบประวัติทั้งหมด</button>
+        </div>
+      </div>
+    </div>
+
     <button class="btn danger block" id="resetBtn">ลบล้างทริปนี้ทั้งหมด ✕</button>
   </div>
 
@@ -74,6 +92,25 @@
     <button data-tab="summary"><span class="ic">📒</span>สรุปยอด<span class="badge" id="settleBadge"></span></button>
   </div>
 </nav>
+
+<div class="sheet-overlay" id="histSheet" aria-hidden="true">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="sheet-grip"></div>
+    <div class="sheet-head">
+      <div>
+        <h2 id="sheetTitle"></h2>
+        <div class="sheet-date" id="sheetDate"></div>
+      </div>
+      <button class="sheet-close" id="sheetClose" aria-label="ปิด">✕</button>
+    </div>
+    <div class="sheet-body" id="sheetBody"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite">
+  <span id="toastMsg"></span>
+  <button id="toastAction" hidden></button>
+</div>
 
 <div class="modal-overlay" id="confirmModal">
   <div class="modal-box sketchy">
