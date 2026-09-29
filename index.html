@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>หารเท่า - Split Even</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chonburi&family=Mali:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1>หารเท่า</h1>
+    <div class="sub">ใครออกเงินไปก่อน เดี๋ยวคิดให้เอง</div>
+  </header>
+
+  <div class="sketchy">
+    <div class="titlebar">
+      <input class="trip-name-input" id="tripName" type="text" value="ทริปเที่ยวของเรา">
+    </div>
+    <div class="hint">ตั้งชื่อทริป แล้วเพิ่มเพื่อนร่วมทริปด้านล่าง</div>
+    <label>เพิ่มเพื่อนร่วมทริป</label>
+    <div class="row">
+      <div><input type="text" id="memberInput" placeholder="ชื่อเพื่อน เช่น แฟน"></div>
+      <button class="btn primary" id="addMemberBtn" style="flex:none;">+ เพิ่ม</button>
+    </div>
+    <div class="chips" id="memberChips"></div>
+    <div class="msg" id="memberMsg"></div>
+  </div>
+
+  <div id="panel-add" class="tabpanel active">
+    <div class="sketchy">
+      <div class="sec-title"><span class="num">1</span> บันทึกรายจ่าย</div>
+      <label>รายการ</label>
+      <input type="text" id="expDesc" placeholder="เช่น ข้าวเย็นร้านที่ 1">
+      <label>จำนวนเงิน (บาท)</label>
+      <input type="number" id="expAmount" placeholder="เช่น 1000" min="0" inputmode="decimal">
+      <label>ใครออกเงินไปก่อน <span class="picker-hint" style="display:inline;">(เลือกได้คนเดียว 👉)</span></label>
+      <div class="avatars" id="paidByPicker"></div>
+      <label>ใครร่วมหารบิลนี้บ้าง <span class="picker-hint" style="display:inline;">(เลือกได้หลายคน ✓)</span></label>
+      <div class="participants" id="participantsPicker"></div>
+      <button class="btn primary block" id="addExpenseBtn">บันทึกรายจ่าย</button>
+      <div class="msg" id="expenseMsg"></div>
+    </div>
+
+    <div class="sketchy">
+      <div class="sec-title"><span class="num">2</span> รายการทั้งหมด</div>
+      <div id="expenseList"></div>
+    </div>
+  </div>
+
+  <div id="panel-summary" class="tabpanel">
+    <div class="sketchy">
+      <div class="sec-title"><span class="num">3</span> สรุปยอดแต่ละคน</div>
+      <div id="ledger"></div>
+    </div>
+    <div class="sketchy">
+      <div class="sec-title"><span class="num">4</span> ใครจ่ายให้ใคร</div>
+      <div id="settlements"></div>
+      <button class="btn primary block" id="settleBtn">✅ ยืนยันเคลียร์บิลแล้ว</button>
+      <div class="hint">กดปุ่มนี้เมื่อทุกคนโอนเงินกันครบตามด้านบนแล้วเท่านั้น ระบบจะเริ่มรอบรายจ่ายใหม่ให้</div>
+    </div>
+    <button class="btn danger block" id="resetBtn">ลบล้างทริปนี้ทั้งหมด ✕</button>
+  </div>
+
+</div>
+
+<nav class="tabs">
+  <div class="tabs-inner">
+    <button class="active" data-tab="add"><span class="ic">✏️</span>รายจ่าย</button>
+    <button data-tab="summary"><span class="ic">📒</span>สรุปยอด<span class="badge" id="settleBadge"></span></button>
+  </div>
+</nav>
+
+<div class="modal-overlay" id="confirmModal">
+  <div class="modal-box sketchy">
+    <span class="warn-icon">⚠️</span>
+    <div class="modal-msg" id="confirmMsg"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" id="confirmCancel">ยกเลิก</button>
+      <button class="btn danger" id="confirmOk">ยืนยัน</button>
+    </div>
+  </div>
+</div>
+<script src="js/app.js"></script>
+</body>
+</html>
