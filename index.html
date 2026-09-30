@@ -19,10 +19,11 @@
   </header>
 
   <div class="sketchy">
-    <div class="titlebar">
-      <input class="trip-name-input" id="tripName" type="text" value="ทริปเที่ยวของเรา">
+    <label class="trip-label" for="tripName">ชื่อทริป</label>
+    <div class="trip-field" id="tripField">
+      <input class="trip-name-input" id="tripName" type="text" placeholder="ตั้งชื่อทริป เช่น ทะเลหัวหิน" maxlength="60" autocomplete="off" enterkeyhint="done">
+      <span class="trip-icon" id="tripIcon" aria-hidden="true">✏️</span>
     </div>
-    <div class="hint">ตั้งชื่อทริป แล้วเพิ่มเพื่อนร่วมทริปด้านล่าง</div>
     <label>เพิ่มเพื่อนร่วมทริป</label>
     <div class="row">
       <div><input type="text" id="memberInput" placeholder="ชื่อเพื่อน เช่น แฟน"></div>

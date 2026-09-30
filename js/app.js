@@ -77,7 +77,7 @@ function esc(s){
 }
 
 let state = {
-  tripName: 'ทริปเที่ยวของเรา',
+  tripName: '',
   members: ['ฉัน','แฟน'],
   expenses: [],
   currentParticipants: null,
@@ -105,7 +105,8 @@ function saveJSON(key, value){
   const saved = loadJSON(KEY_CURRENT, null);
   if(saved && Array.isArray(saved.members) && Array.isArray(saved.expenses)){
     state = {
-      tripName: typeof saved.tripName==='string' ? saved.tripName : state.tripName,
+      // 'ทริปเที่ยวของเรา' คือค่าเริ่มต้นของเวอร์ชันก่อน ถือว่ายังไม่ได้ตั้งชื่อ
+      tripName: (typeof saved.tripName==='string' && saved.tripName!=='ทริปเที่ยวของเรา') ? saved.tripName : '',
       members: saved.members,
       expenses: saved.expenses,
       currentParticipants: Array.isArray(saved.currentParticipants) ? saved.currentParticipants : null,
@@ -497,7 +498,7 @@ function buildSnapshot(){
     v: 1,
     id: 'h' + Date.now() + Math.random().toString(36).slice(2,6),
     settledAt: Date.now(),
-    tripName: (state.tripName||'').trim() || 'ทริปไม่มีชื่อ',
+    tripName: (state.tripName||'').trim() || ('ทริป ' + new Date().toLocaleDateString('th-TH', {day:'numeric', month:'short'})),
     members: involved.map(name=>({name, emoji:getEmoji(name)})),
     expenses: state.expenses.map(e=>({desc:e.desc, amount:e.amount, paidBy:e.paidBy, participants:[...e.participants]})),
     total: r2(state.expenses.reduce((s,e)=>s+e.amount, 0)),
@@ -952,10 +953,26 @@ el('addMemberBtn').addEventListener('click', addMember);
 el('memberInput').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); addMember(); }});
 el('addExpenseBtn').addEventListener('click', addExpense);
 el('tripName').addEventListener('input', e=>{ state.tripName = e.target.value; scheduleSave(); });
+// แตะแล้วเลือกข้อความทั้งหมด พิมพ์ทับได้ทันที
+el('tripName').addEventListener('focus', e=>{
+  const inp = e.target;
+  setTimeout(()=>{ if(document.activeElement===inp && inp.value) inp.setSelectionRange(0, inp.value.length); }, 0);
+});
+el('tripName').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); e.target.blur(); } });
+el('tripName').addEventListener('change', ()=>{
+  state.tripName = el('tripName').value.trim();
+  el('tripName').value = state.tripName;
+  saveCurrentNow();
+  const ic = el('tripIcon');
+  ic.textContent = '✓'; ic.classList.add('saved');
+  clearTimeout(ic._t);
+  ic._t = setTimeout(()=>{ ic.textContent = '✏️'; ic.classList.remove('saved'); }, 1300);
+});
+el('tripField').addEventListener('click', e=>{ if(e.target!==el('tripName')) el('tripName').focus(); });
 
 el('resetBtn').addEventListener('click', ()=>{
   showConfirm('ล้างทริปที่กำลังทำอยู่ทั้งหมดเลยนะ ชื่อเพื่อนและรายจ่ายรอบนี้จะหายหมด ย้อนกลับไม่ได้ (ทริปที่เคลียร์แล้วยังอยู่ครบ) แน่ใจไหม?', ()=>{
-    state = { tripName:'ทริปเที่ยวของเรา', members:[], expenses:[], currentParticipants:[], memberEmoji:{} };
+    state = { tripName:'', members:[], expenses:[], currentParticipants:[], memberEmoji:{} };
     el('tripName').value = state.tripName;
     renderAll();
   }, 'ล้างทริปนี้เลย');
