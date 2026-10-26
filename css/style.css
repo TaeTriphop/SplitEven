@@ -1,4 +1,3 @@
-
   :root{
     --paper:#f6efdc;
     --paper-2:#efe6cd;
@@ -465,6 +464,41 @@
     font:inherit; font-weight:700; padding:7px 13px; border-radius:12px 4px 12px 4px; cursor:pointer;
   }
   .toast button[hidden]{display:none;}
+
+  /* ---------- แยกส่วนในบิล ---------- */
+  .split-toggle{margin-top:12px; font-size:14px;}
+  .part-box{
+    margin-top:12px; padding:10px 12px 12px;
+    border:2px dashed var(--ink-soft); border-radius:14px 5px 14px 5px;
+    background:var(--paper);
+  }
+  .part-head{display:flex; justify-content:space-between; align-items:center; gap:8px; font-weight:700; font-size:14px;}
+  .part-head .linkbtn{font-size:12.5px; font-weight:500;}
+  .part-box label{margin-top:8px;}
+  .part-hint{margin:-2px 0 6px;}
+  .part-box .pp{
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(104px, 1fr));
+    gap:6px; margin-top:4px;
+  }
+  .part-box .pp .avatar-pick{min-width:0; padding:6px 8px 6px 6px; gap:5px;}
+  .part-box .pp .avatar-pick .nm{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .part-box .pp .avatar-pick:not(.active){opacity:0.6;}
+  .part-box .pp .avatar-pick:not(.active) .nm{text-decoration:line-through;}
+  .split-preview{
+    margin-top:12px; padding:10px 12px;
+    background:var(--blue-bg); color:var(--ink);
+    border-radius:14px 5px 14px 5px; font-size:13px; line-height:1.55;
+  }
+  .split-preview[hidden]{display:none;}
+  .split-preview .sp-title{font-weight:700; margin-bottom:4px;}
+  .split-preview .sp-line{display:flex; justify-content:space-between; gap:10px; padding:2px 0;}
+  .split-preview .sp-line span{min-width:0; overflow-wrap:anywhere;}
+  .split-preview .sp-line b{white-space:nowrap;}
+  .split-preview .sp-err{color:var(--owe); font-weight:700;}
+  .split-preview .sp-muted{color:var(--ink-soft);}
+  .sp-people{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; padding-top:8px; border-top:1.5px dashed var(--line);}
+  .sp-people span{background:var(--card); border-radius:10px; padding:2px 9px; font-weight:700; white-space:nowrap;}
+  .receipt .split-lines{margin-top:2px;}
 
   /* ---------- แชร์ ---------- */
   .share-btn{margin-left:auto; flex:none; font-size:13px; padding:5px 12px;}

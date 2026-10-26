@@ -1,3 +1,4 @@
+
 const COLORS = [
   '#c1443c',
   '#3f5a7d',
@@ -161,14 +162,55 @@ function renderMembers(){
   });
 }
 
+/* ---------- การหารแบบมีส่วนแยก ----------
+   exp.participants = คนที่หาร "ส่วนที่เหลือ" (หรือทั้งบิลถ้าไม่มีส่วนแยก)
+   exp.parts = [{label, amount, participants}] ส่วนที่หารเฉพาะบางคน */
+const r2 = n => Math.round(n*100)/100;
+function partsTotal(exp){ return (exp.parts||[]).reduce((s,p)=>s+p.amount, 0); }
+function remainderOf(exp){ return r2(exp.amount - partsTotal(exp)); }
+function expenseShares(exp){
+  const out = {};
+  const add = (n, v)=>{ out[n] = (out[n]||0) + v; };
+  (exp.parts||[]).forEach(p=>{
+    if(p.participants.length){ const s = p.amount / p.participants.length; p.participants.forEach(n=>add(n, s)); }
+  });
+  const rem = remainderOf(exp);
+  if(rem > 0.005 && exp.participants.length){
+    const s = rem / exp.participants.length; exp.participants.forEach(n=>add(n, s));
+  }
+  return out;
+}
+function expensePeople(exp){
+  const set = new Set(exp.participants);
+  (exp.parts||[]).forEach(p=> p.participants.forEach(n=>set.add(n)));
+  return [...set];
+}
+// คืนกลุ่มการหารของบิล: [{label, amount, people}]
+function splitGroups(exp){
+  const parts = exp.parts||[];
+  if(!parts.length) return [{label:'', amount:exp.amount, people:exp.participants}];
+  const groups = parts.map(p=>({label:p.label, amount:p.amount, people:p.participants}));
+  const rem = remainderOf(exp);
+  if(rem > 0.005) groups.push({label:'ที่เหลือ', amount:rem, people:exp.participants});
+  return groups;
+}
+// ข้อความสั้นสำหรับประวัติ/รูป (ยังไม่ escape)
+function splitLines(exp, everyone){
+  return splitGroups(exp).map(g=>{
+    const who = g.people.length===everyone ? 'หารทุกคน' : `หาร ${g.people.length} คน (${g.people.join(', ')})`;
+    return g.label ? `${g.label} ฿${fmt(g.amount)} ${who}` : who;
+  });
+}
+
 function removeMember(name){
-  const used = state.expenses.some(e => e.paidBy===name || e.participants.includes(name));
+  const used = state.expenses.some(e => e.paidBy===name || expensePeople(e).includes(name));
   if(used){
     el('memberMsg').textContent = `ลบ "${name}" ไม่ได้ เพราะมีอยู่ในรายจ่ายแล้ว ลบรายจ่ายที่เกี่ยวข้องก่อนนะ`;
     return;
   }
   state.members = state.members.filter(m=>m!==name);
   if(state.currentParticipants) state.currentParticipants = state.currentParticipants.filter(m=>m!==name);
+  draftParts.forEach(pt=>{ pt.participants = pt.participants.filter(m=>m!==name); });
   if(state.memberEmoji) delete state.memberEmoji[name];
   el('memberMsg').textContent = '';
   renderAll();
@@ -182,6 +224,7 @@ function addMember(){
   if(state.members.includes(name)){ el('memberMsg').textContent='มีชื่อนี้อยู่แล้ว'; return; }
   state.members.push(name);
   if(state.currentParticipants) state.currentParticipants.push(name);
+  draftParts.forEach(pt=> pt.participants.push(name));
   input.value='';
   renderAll();
 }
@@ -226,9 +269,96 @@ function renderParticipantsPicker(){
         state.currentParticipants.push(name);
       }
       renderParticipantsPicker();
+      updateSplitPreview();
     });
     wrap.appendChild(b);
   });
+}
+
+/* ---------- ฟอร์มส่วนแยก ---------- */
+let draftParts = [];
+function personPick(name, active, onClick){
+  const b = document.createElement('div');
+  b.className = 'avatar-pick participant' + (active?' active':'');
+  b.innerHTML = `${active ? '<span class="mark">✓</span>':''}<span class="dot" style="border-color:${colorFor(name,state.members)}">${getEmoji(name)}</span><span class="nm">${esc(name)}</span>`;
+  b.title = name;
+  b.addEventListener('click', onClick);
+  return b;
+}
+function renderParts(focusIndex){
+  const wrap = el('partsWrap');
+  wrap.innerHTML = '';
+  draftParts.forEach((pt, i)=>{
+    pt.participants = pt.participants.filter(m=>state.members.includes(m));
+    const box = document.createElement('div');
+    box.className = 'part-box';
+    box.innerHTML = `
+      <div class="part-head"><span>✂️ ส่วนแยกที่ ${i+1}</span><button type="button" class="linkbtn">ลบส่วนนี้</button></div>
+      <label>ส่วนนี้คืออะไร <span class="picker-hint" style="display:inline;">(ไม่ใส่ก็ได้)</span></label>
+      <input type="text" class="pl" placeholder="เช่น อาหาร+กับแกล้ม" maxlength="40">
+      <label>จำนวนเงินของส่วนนี้ (บาท)</label>
+      <input type="number" class="pa" placeholder="เช่น 1800" min="0" inputmode="decimal">
+      <label>ใครกินส่วนนี้</label>
+      <div class="picker-hint part-hint">แตะชื่อคนที่ไม่ได้กินเพื่อเอาออก</div>
+      <div class="participants pp"></div>`;
+    const pl = box.querySelector('.pl'), pa = box.querySelector('.pa');
+    pl.value = pt.label; pa.value = pt.amount;
+    pl.addEventListener('input', ()=>{ pt.label = pl.value; updateSplitPreview(); });
+    pa.addEventListener('input', ()=>{ pt.amount = pa.value; updateSplitPreview(); });
+    box.querySelector('.part-head .linkbtn').addEventListener('click', ()=>{ draftParts.splice(i, 1); renderParts(); });
+    const ppw = box.querySelector('.pp');
+    state.members.forEach(name=>{
+      const active = pt.participants.includes(name);
+      ppw.appendChild(personPick(name, active, ()=>{
+        pt.participants = active ? pt.participants.filter(m=>m!==name) : pt.participants.concat(name);
+        renderParts();
+      }));
+    });
+    wrap.appendChild(box);
+  });
+  el('addPartBtn').textContent = draftParts.length ? '+ แยกอีกส่วน' : '+ แยกส่วนที่บางคนไม่ได้กิน';
+  el('participantsLabelText').textContent = draftParts.length ? 'ใครหารส่วนที่เหลือ' : 'ใครร่วมหารบิลนี้บ้าง';
+  if(typeof focusIndex==='number'){
+    const boxes = wrap.querySelectorAll('.part-box');
+    if(boxes[focusIndex]) boxes[focusIndex].querySelector('.pl').focus();
+  }
+  updateSplitPreview();
+}
+function readDraftParts(){
+  return draftParts.map((p, i)=>({
+    label: p.label.trim() || `ส่วนที่ ${i+1}`,
+    amount: r2(parseFloat(p.amount) || 0),
+    participants: state.members.filter(m=>p.participants.includes(m))
+  }));
+}
+function updateSplitPreview(){
+  const box = el('splitPreview');
+  if(!draftParts.length){ box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false;
+  const total = parseFloat(el('expAmount').value) || 0;
+  const main = state.members.filter(m=>(state.currentParticipants||[]).includes(m));
+  const parts = readDraftParts().filter(p=>p.amount > 0);
+  let html = '<div class="sp-title">สรุปบิลนี้</div>';
+  if(!total){
+    box.innerHTML = html + '<div class="sp-muted">ใส่จำนวนเงินทั้งบิลด้านบนก่อนนะ</div>';
+    return;
+  }
+  const sum = parts.reduce((s,p)=>s+p.amount, 0);
+  const rem = r2(total - sum);
+  if(rem < -0.005){
+    box.innerHTML = html + `<div class="sp-err">ส่วนแยกรวมกัน ฿${fmt(sum)} เกินยอดทั้งบิล ฿${fmt(total)}</div>`;
+    return;
+  }
+  const line = (label, amt, n)=> `<div class="sp-line"><span>${esc(label)} ฿${fmt(amt)} หาร ${n} คน</span>${n ? `<b>คนละ ฿${fmt(amt/n)}</b>` : '<b class="sp-err">ยังไม่ได้เลือกคน</b>'}</div>`;
+  parts.forEach(p=>{ html += line(p.label, p.amount, p.participants.length); });
+  if(rem > 0.005) html += line('ที่เหลือ', rem, main.length);
+  if(!parts.length) html += '<div class="sp-muted">ใส่จำนวนเงินของส่วนแยกด้วยนะ</div>';
+  const shares = expenseShares({amount: total, participants: main, parts});
+  const people = state.members.filter(m=>shares[m]);
+  if(people.length && parts.length){
+    html += `<div class="sp-people">${people.map(m=>`<span>${getEmoji(m)} ${esc(m)} ฿${fmt(shares[m])}</span>`).join('')}</div>`;
+  }
+  box.innerHTML = html;
 }
 
 function addExpense(){
@@ -242,15 +372,25 @@ function addExpense(){
   if(!desc){ el('expenseMsg').textContent='ใส่ชื่อรายการก่อนนะ'; return; }
   if(!amount || amount<=0){ el('expenseMsg').textContent='ใส่จำนวนเงินให้ถูกต้องนะ'; return; }
   if(!paidBy){ el('expenseMsg').textContent='เลือกคนที่ออกเงินก่อนนะ'; return; }
-  if(participants.length===0){ el('expenseMsg').textContent='เลือกคนที่ร่วมหารบิลนี้อย่างน้อย 1 คนนะ'; return; }
+  const parts = readDraftParts();
+  const msg = t => { el('expenseMsg').textContent = t; };
+  for(let i=0;i<parts.length;i++){
+    if(!(parts[i].amount > 0)){ msg(`ใส่จำนวนเงินของส่วนแยกที่ ${i+1} ด้วยนะ (หรือกดลบส่วนนี้)`); return; }
+    if(!parts[i].participants.length){ msg(`เลือกคนที่กินส่วนแยกที่ ${i+1} อย่างน้อย 1 คนนะ`); return; }
+  }
+  const rem = r2(amount - parts.reduce((s,p)=>s+p.amount, 0));
+  if(rem < -0.005){ msg('ส่วนแยกรวมกันเกินยอดทั้งบิล เช็กตัวเลขอีกทีนะ'); return; }
+  if(rem > 0.005 && participants.length===0){
+    msg(parts.length ? 'เลือกคนที่หารส่วนที่เหลืออย่างน้อย 1 คนนะ' : 'เลือกคนที่ร่วมหารบิลนี้อย่างน้อย 1 คนนะ'); return;
+  }
 
-  state.expenses.push({
-    id: Date.now()+Math.random(),
-    desc, amount, paidBy, participants
-  });
+  const exp = { id: Date.now()+Math.random(), desc, amount, paidBy, participants };
+  if(parts.length) exp.parts = parts;
+  state.expenses.push(exp);
 
   el('expDesc').value='';
   el('expAmount').value='';
+  draftParts = [];
   renderAll();
 }
 
@@ -268,6 +408,13 @@ function renderExpenseList(){
   }
   [...state.expenses].reverse().forEach(exp=>{
     const share = exp.amount / exp.participants.length;
+    const hasParts = exp.parts && exp.parts.length;
+    const meta = hasParts
+      ? `${esc(exp.paidBy)} ออกเงินไปก่อน &middot; แยกหาร ${splitGroups(exp).length} ส่วน
+         <div class="split-lines">${splitGroups(exp).map(g=>
+           `• ${esc(g.label)} ฿${fmt(g.amount)} หาร ${g.people.length} คน (คนละ ฿${fmt(g.amount/g.people.length)}): ${g.people.map(esc).join(', ')}`).join('<br>')}</div>`
+      : `${esc(exp.paidBy)} ออกเงินไปก่อน &middot; หารกัน ${exp.participants.length} คน (คนละ ฿${fmt(share)})<br>
+        ร่วมหาร: ${exp.participants.map(esc).join(', ')}`;
     const card = document.createElement('div');
     card.className='receipt';
     card.innerHTML = `
@@ -277,10 +424,7 @@ function renderExpenseList(){
         <div class="desc">${esc(exp.desc)}</div>
         <div class="amt">฿${fmt(exp.amount)}</div>
       </div>
-      <div class="meta">
-        ${esc(exp.paidBy)} ออกเงินไปก่อน &middot; หารกัน ${exp.participants.length} คน (คนละ ฿${fmt(share)})<br>
-        ร่วมหาร: ${exp.participants.map(esc).join(', ')}
-      </div>
+      <div class="meta">${meta}</div>
     `;
     card.querySelector('.del').addEventListener('click', ()=> deleteExpense(exp.id));
     wrap.appendChild(card);
@@ -293,10 +437,8 @@ function computeBalances(){
   state.expenses.forEach(exp=>{
     if(paid[exp.paidBy]===undefined) return;
     paid[exp.paidBy]+=exp.amount;
-    const share = exp.amount/exp.participants.length;
-    exp.participants.forEach(p=>{
-      if(owed[p]!==undefined) owed[p]+=share;
-    });
+    const sh = expenseShares(exp);
+    Object.keys(sh).forEach(p=>{ if(owed[p]!==undefined) owed[p]+=sh[p]; });
   });
   const balances = {};
   state.members.forEach(m=>{
@@ -413,6 +555,7 @@ function renderAll(){
   renderMembers();
   renderPaidByPicker();
   renderParticipantsPicker();
+  renderParts();
   renderExpenseList();
   renderLedger();
   renderSettlements();
@@ -492,7 +635,7 @@ function toggleHistory(force){
 function buildSnapshot(){
   const {paid, owed} = computeBalances();
   const involved = state.members.filter(m=>
-    state.expenses.some(e=> e.paidBy===m || e.participants.includes(m)));
+    state.expenses.some(e=> e.paidBy===m || expensePeople(e).includes(m)));
   const r2 = n => Math.round(n*100)/100;
   const snapshot = {
     v: 1,
@@ -500,7 +643,11 @@ function buildSnapshot(){
     settledAt: Date.now(),
     tripName: (state.tripName||'').trim() || ('ทริป ' + new Date().toLocaleDateString('th-TH', {day:'numeric', month:'short'})),
     members: involved.map(name=>({name, emoji:getEmoji(name)})),
-    expenses: state.expenses.map(e=>({desc:e.desc, amount:e.amount, paidBy:e.paidBy, participants:[...e.participants]})),
+    expenses: state.expenses.map(e=>{
+      const o = {desc:e.desc, amount:e.amount, paidBy:e.paidBy, participants:[...e.participants]};
+      if(e.parts && e.parts.length) o.parts = e.parts.map(p=>({label:p.label, amount:p.amount, participants:[...p.participants]}));
+      return o;
+    }),
     total: r2(state.expenses.reduce((s,e)=>s+e.amount, 0)),
     settlements: computeSettlements(),
     perPerson: involved.map(name=>({name, paid:r2(paid[name]||0), share:r2(owed[name]||0)}))
@@ -564,12 +711,15 @@ function openHistory(id){
       </div>`).join('');
 
   const expenses = h.expenses.map(e=>{
-    const who = e.participants.length===everyone ? `หารทุกคน` : `หาร ${e.participants.length} คน: ${e.participants.map(esc).join(', ')}`;
+    const lines = splitLines(e, everyone);
+    const sub = (e.parts && e.parts.length)
+      ? `${emo[e.paidBy]||''} ${esc(e.paidBy)} ออกให้ก่อน<br>${lines.map(l=>'• '+esc(l)).join('<br>')}`
+      : `${emo[e.paidBy]||''} ${esc(e.paidBy)} ออกให้ก่อน, ${esc(lines[0])}`;
     return `
       <div class="ex">
         <div class="l">
           <div class="d">${esc(e.desc)}</div>
-          <div class="s">${emo[e.paidBy]||''} ${esc(e.paidBy)} ออกให้ก่อน, ${who}</div>
+          <div class="s">${sub}</div>
         </div>
         <span class="a">฿${fmt(e.amount)}</span>
       </div>`;
@@ -811,7 +961,11 @@ function drawShareCard(ctx, snap, H){
   section('รายจ่ายทั้งหมด');
   const everyone = snap.members.length;
   snap.expenses.slice(0, MAX_EXP).forEach((e, i)=>{
-    const rh = 46;
+    const lines = splitLines(e, everyone);
+    const subs = (e.parts && e.parts.length)
+      ? [`${e.paidBy} ออกให้ก่อน`].concat(lines.map(l=>'• '+l))
+      : [`${e.paidBy} ออกให้ก่อน, ${lines[0]}`];
+    const rh = 30 + subs.length * 16;
     if(draw){
       if(i>0) hLine(ctx, x0, x1, y);
       ctx.font = F(700, 14.5); ctx.textAlign='right'; ctx.fillStyle = SC.ink;
@@ -821,8 +975,7 @@ function drawShareCard(ctx, snap, H){
       ctx.textAlign='left';
       ctx.fillText(fitText(ctx, e.desc, cw - amtW - 14), x0, y + 16);
       ctx.font = F(400, 12); ctx.fillStyle = SC.soft;
-      const who = e.participants.length===everyone ? 'หารทุกคน' : `หาร ${e.participants.length} คน (${e.participants.join(', ')})`;
-      ctx.fillText(fitText(ctx, `${e.paidBy} ออกให้ก่อน, ${who}`, cw), x0, y + 34);
+      subs.forEach((t, k)=> ctx.fillText(fitText(ctx, t, cw), x0, y + 34 + k*16));
     }
     y += rh;
   });
@@ -952,6 +1105,11 @@ el('confirmOk').addEventListener('click', ()=>{
 el('addMemberBtn').addEventListener('click', addMember);
 el('memberInput').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); addMember(); }});
 el('addExpenseBtn').addEventListener('click', addExpense);
+el('addPartBtn').addEventListener('click', ()=>{
+  draftParts.push({label:'', amount:'', participants:[...state.members]});
+  renderParts(draftParts.length-1);
+});
+el('expAmount').addEventListener('input', updateSplitPreview);
 el('tripName').addEventListener('input', e=>{ state.tripName = e.target.value; scheduleSave(); });
 // แตะแล้วเลือกข้อความทั้งหมด พิมพ์ทับได้ทันที
 el('tripName').addEventListener('focus', e=>{

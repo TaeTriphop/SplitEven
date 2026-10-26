@@ -18,7 +18,7 @@
     <div class="sub">ใครออกเงินไปก่อน ก็ระวังโดนบิด</div>
   </header>
 
-  <div class="sketchy">
+   <div class="sketchy">
     <label class="trip-label" for="tripName">ชื่อทริป</label>
     <div class="trip-field" id="tripField">
       <input class="trip-name-input" id="tripName" type="text" placeholder="ตั้งชื่อทริป เช่น ทะเลหัวหิน" maxlength="60" autocomplete="off" enterkeyhint="done">
@@ -42,8 +42,11 @@
       <input type="number" id="expAmount" placeholder="เช่น 1000" min="0" inputmode="decimal">
       <label>ใครออกเงินไปก่อน <span class="picker-hint" style="display:inline;">(เลือกได้คนเดียว 👉)</span></label>
       <div class="avatars" id="paidByPicker"></div>
-      <label>ใครร่วมหารบิลนี้บ้าง <span class="picker-hint" style="display:inline;">(เลือกได้หลายคน ✓)</span></label>
+      <label><span id="participantsLabelText">ใครร่วมหารบิลนี้บ้าง</span> <span class="picker-hint" style="display:inline;">(เลือกได้หลายคน ✓)</span></label>
       <div class="participants" id="participantsPicker"></div>
+      <div id="partsWrap"></div>
+      <button type="button" class="linkbtn plain split-toggle" id="addPartBtn">+ แยกส่วนที่บางคนไม่ได้กิน</button>
+      <div class="split-preview" id="splitPreview" hidden></div>
       <button class="btn primary block" id="addExpenseBtn">บันทึกรายจ่าย</button>
       <div class="msg" id="expenseMsg"></div>
     </div>
