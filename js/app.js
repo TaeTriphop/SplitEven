@@ -299,7 +299,7 @@ function renderParticipantsPicker(){
 /* ---------- มีใครไม่ได้กินอะไรไหม ---------- */
 // draftExcl = [{excluded:[ชื่อ], label, amount}] ส่วนที่บางคนไม่ได้กิน (ยังไม่บันทึก)
 let draftExcl = [];
-const QUICK_LABELS = ['อาหาร', 'กับแกล้ม', 'ของหวาน', 'เครื่องดื่ม', 'เมนูก่อนมาถึง'];
+const QUICK_LABELS = ['เมนูก่อนมาถึง', 'อาหาร' , 'ของหวาน', 'เครื่องดื่ม', 'กับแกล้ม'];
 function mainParticipants(){ return state.members.filter(m=>(state.currentParticipants||[]).includes(m)); }
 
 function readDraftParts(){
