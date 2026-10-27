@@ -1,3 +1,4 @@
+
   :root{
     --paper:#f6efdc;
     --paper-2:#efe6cd;
@@ -499,6 +500,55 @@
   .sp-people{display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; padding-top:8px; border-top:1.5px dashed var(--line);}
   .sp-people span{background:var(--card); border-radius:10px; padding:2px 9px; font-weight:700; white-space:nowrap;}
   .receipt .split-lines{margin-top:2px;}
+
+  /* ---------- มีใครไม่ได้กินอะไรไหม ---------- */
+  .ne-btn{
+    display:flex; align-items:center; gap:10px; width:100%;
+    min-height:46px; margin-top:16px; padding:0 14px;
+    background:transparent; color:var(--ink);
+    border:2px dashed var(--ink-soft); border-radius:14px 5px 14px 5px;
+    font:inherit; font-size:14.5px; font-weight:500; text-align:left; cursor:pointer;
+  }
+  .ne-btn:active{background:var(--paper);}
+  .ne-btn[hidden]{display:none;}
+  .ne-ic{font-size:18px; flex:none;}
+  .ne-tx{flex:1;}
+  .ne-chev{font-size:22px; line-height:1; color:var(--ink-soft); flex:none;}
+  .ne-row{
+    display:flex; align-items:center; gap:8px; margin-top:12px;
+    padding:6px 4px 6px 12px;
+    background:var(--paper); border:1.5px solid var(--line);
+    border-radius:14px 5px 14px 5px;
+  }
+  .ne-row + .ne-row{margin-top:8px;}
+  .ne-faces{flex:none; font-size:17px; letter-spacing:-2px;}
+  .ne-sent{flex:1; min-width:0; font-size:14px; line-height:1.45; overflow-wrap:anywhere; cursor:pointer; padding:4px 0;}
+  .ne-icon{
+    flex:none; width:38px; height:38px; border:none; border-radius:50%;
+    background:none; color:var(--ink-soft); font:inherit; font-size:15px; cursor:pointer;
+  }
+  .ne-icon:active{background:var(--paper-2);}
+  .ne-more{display:block; margin:8px 2px 0; font-size:13.5px; font-weight:500;}
+  .ne-more[hidden]{display:none;}
+  .split-preview.result{font-size:14px; font-weight:700; color:var(--blue);}
+  .split-preview.result .sp-err{font-weight:700;}
+  #exclSheet{z-index:57;}
+  .ex-step{display:flex; align-items:center; gap:8px; font-weight:700; font-size:15px; margin:2px 0 10px;}
+  .num-s{
+    width:22px; height:22px; border-radius:50%; border:2px solid var(--ink); flex:none;
+    display:inline-flex; align-items:center; justify-content:center; font-size:12px;
+  }
+  .ex-people{display:grid; grid-template-columns:repeat(auto-fill, minmax(104px, 1fr)); gap:6px; margin-bottom:20px;}
+  .ex-people .avatar-pick{min-width:0; padding:6px 8px 6px 6px; gap:5px;}
+  .ex-people .avatar-pick .nm{min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .avatar-pick.excl.active{border-color:var(--owe); background:var(--owe-bg); color:var(--owe); font-weight:700;}
+  .ex-quick{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px;}
+  .qchip{
+    font:inherit; font-size:13.5px; padding:6px 12px; border-radius:16px;
+    border:2px solid var(--ink-soft); background:var(--card); color:var(--ink-soft); cursor:pointer;
+  }
+  .qchip.on{border-color:var(--ink); background:var(--tape); color:var(--on-tape); font-weight:700;}
+  .ex-section{margin-bottom:6px;}
 
   /* ---------- แชร์ ---------- */
   .share-btn{margin-left:auto; flex:none; font-size:13px; padding:5px 12px;}

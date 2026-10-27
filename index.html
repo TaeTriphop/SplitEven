@@ -18,7 +18,7 @@
     <div class="sub">ใครออกเงินไปก่อน ก็ระวังโดนบิด</div>
   </header>
 
-   <div class="sketchy">
+ <div class="sketchy">
     <label class="trip-label" for="tripName">ชื่อทริป</label>
     <div class="trip-field" id="tripField">
       <input class="trip-name-input" id="tripName" type="text" placeholder="ตั้งชื่อทริป เช่น ทะเลหัวหิน" maxlength="60" autocomplete="off" enterkeyhint="done">
@@ -45,8 +45,13 @@
       <label><span id="participantsLabelText">ใครร่วมหารบิลนี้บ้าง</span> <span class="picker-hint" style="display:inline;">(เลือกได้หลายคน ✓)</span></label>
       <div class="participants" id="participantsPicker"></div>
       <div id="partsWrap"></div>
-      <button type="button" class="linkbtn plain split-toggle" id="addPartBtn">+ แยกส่วนที่บางคนไม่ได้กิน</button>
-      <div class="split-preview" id="splitPreview" hidden></div>
+      <button type="button" class="ne-btn" id="addPartBtn">
+        <span class="ne-ic" aria-hidden="true">🍽️</span>
+        <span class="ne-tx">มีใครไม่ได้กินอะไรไหม?</span>
+        <span class="ne-chev" aria-hidden="true">›</span>
+      </button>
+      <button type="button" class="linkbtn plain ne-more" id="addMoreBtn" hidden>+ มีคนไม่ได้กินอย่างอื่นอีก</button>
+      <div class="split-preview result" id="splitPreview" hidden></div>
       <button class="btn primary block" id="addExpenseBtn">บันทึกรายจ่าย</button>
       <div class="msg" id="expenseMsg"></div>
     </div>
@@ -133,22 +138,42 @@
   </div>
 </div>
 
+<div class="sheet-overlay" id="exclSheet" aria-hidden="true">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="exclTitle">
+    <div class="sheet-grip"></div>
+    <div class="sheet-head">
+      <div><h2 id="exclTitle">มีใครไม่ได้กินอะไรไหม?</h2></div>
+      <button class="sheet-close" id="exclClose" aria-label="ปิด">✕</button>
+    </div>
+    <div class="sheet-body">
+      <div class="ex-step"><span class="num-s">1</span> ใครไม่ได้กิน</div>
+      <div class="ex-people" id="exclPeople"></div>
+      <div class="ex-step"><span class="num-s">2</span> <span id="exclQ">ไม่ได้กินอะไร</span></div>
+      <div class="ex-quick" id="exclQuick"></div>
+      <input type="text" id="exclLabel" placeholder="หรือพิมพ์เอง เช่น ของทอด" maxlength="40" autocomplete="off">
+      <label for="exclAmount">ราคารวมของที่ไม่ได้กิน (บาท)</label>
+      <input type="number" id="exclAmount" placeholder="เช่น 1800" min="0" inputmode="decimal">
+      <div class="msg" id="exclMsg"></div>
+      <button class="btn primary block" id="exclDone">เสร็จ</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status" aria-live="polite">
   <span id="toastMsg"></span>
   <button id="toastAction" hidden></button>
 </div>
 
-<div class="modal-overlay" id="confirmModal">
-  <div class="modal-box sketchy">
-    <span class="warn-icon">⚠️</span>
-    <div class="modal-msg" id="confirmMsg"></div>
-    <div class="modal-actions">
-      <button class="btn ghost" id="confirmCancel">ยกเลิก</button>
-      <button class="btn danger" id="confirmOk">ยืนยัน</button>
+  <div class="modal-overlay" id="confirmModal">
+    <div class="modal-box sketchy">
+      <span class="warn-icon">⚠️</span>
+      <div class="modal-msg" id="confirmMsg"></div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="confirmCancel">ยกเลิก</button>
+        <button class="btn danger" id="confirmOk">ยืนยัน</button>
+      </div>
     </div>
   </div>
-</div>
-
 <script src="js/app.js"></script>
 </body>
 </html>

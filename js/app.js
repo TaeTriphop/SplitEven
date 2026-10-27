@@ -194,11 +194,32 @@ function splitGroups(exp){
   if(rem > 0.005) groups.push({label:'ที่เหลือ', amount:rem, people:exp.participants});
   return groups;
 }
-// ข้อความสั้นสำหรับประวัติ/รูป (ยังไม่ escape)
+// สรุปผลเป็นภาษาคน เช่น "เบียร์ จ่าย ฿240 · คนอื่นคนละ ฿690"
+function resultSentence(exp){
+  const sh = expenseShares(exp);
+  const order = expensePeople(exp).filter(n=>sh[n]);
+  const groups = [];
+  order.forEach(n=>{
+    const k = fmt(r2(sh[n]));
+    let g = groups.find(x=>x.k===k);
+    if(!g){ g = {k, names:[]}; groups.push(g); }
+    g.names.push(n);
+  });
+  if(groups.length===1) return `คนละ ฿${groups[0].k}`;
+  const big = groups.reduce((a,b)=> b.names.length > a.names.length ? b : a);
+  if(big.names.length < 2) return groups.map(g=>`${g.names[0]} ฿${g.k}`).join(' · ');
+  return groups.filter(g=>g!==big).map(g=>`${g.names.join(', ')} จ่าย ฿${g.k}`).join(' · ') + ` · คนอื่นคนละ ฿${big.k}`;
+}
+// บรรทัดอธิบายการหาร (ยังไม่ escape) — ถ้ามีส่วนแยกจะมีเครื่องหมายนำหน้ามาให้แล้ว
 function splitLines(exp, everyone){
+  const parts = exp.parts||[];
+  if(parts.length && parts.every(p=>Array.isArray(p.excluded) && p.excluded.length)){
+    return parts.map(p=>`• ${p.excluded.join(', ')} ไม่ได้กิน ${p.label} ฿${fmt(p.amount)}`)
+      .concat(`→ ${resultSentence(exp)}`);
+  }
   return splitGroups(exp).map(g=>{
     const who = g.people.length===everyone ? 'หารทุกคน' : `หาร ${g.people.length} คน (${g.people.join(', ')})`;
-    return g.label ? `${g.label} ฿${fmt(g.amount)} ${who}` : who;
+    return g.label ? `• ${g.label} ฿${fmt(g.amount)} ${who}` : who;
   });
 }
 
@@ -210,7 +231,8 @@ function removeMember(name){
   }
   state.members = state.members.filter(m=>m!==name);
   if(state.currentParticipants) state.currentParticipants = state.currentParticipants.filter(m=>m!==name);
-  draftParts.forEach(pt=>{ pt.participants = pt.participants.filter(m=>m!==name); });
+  draftExcl.forEach(x=>{ x.excluded = x.excluded.filter(m=>m!==name); });
+  draftExcl = draftExcl.filter(x=>x.excluded.length);
   if(state.memberEmoji) delete state.memberEmoji[name];
   el('memberMsg').textContent = '';
   renderAll();
@@ -224,7 +246,6 @@ function addMember(){
   if(state.members.includes(name)){ el('memberMsg').textContent='มีชื่อนี้อยู่แล้ว'; return; }
   state.members.push(name);
   if(state.currentParticipants) state.currentParticipants.push(name);
-  draftParts.forEach(pt=> pt.participants.push(name));
   input.value='';
   renderAll();
 }
@@ -269,96 +290,148 @@ function renderParticipantsPicker(){
         state.currentParticipants.push(name);
       }
       renderParticipantsPicker();
-      updateSplitPreview();
+      renderParts();
     });
     wrap.appendChild(b);
   });
 }
 
-/* ---------- ฟอร์มส่วนแยก ---------- */
-let draftParts = [];
-function personPick(name, active, onClick){
+/* ---------- มีใครไม่ได้กินอะไรไหม ---------- */
+// draftExcl = [{excluded:[ชื่อ], label, amount}] ส่วนที่บางคนไม่ได้กิน (ยังไม่บันทึก)
+let draftExcl = [];
+const QUICK_LABELS = ['อาหาร', 'กับแกล้ม', 'ของหวาน', 'เครื่องดื่ม', 'เมนูก่อนมาถึง'];
+function mainParticipants(){ return state.members.filter(m=>(state.currentParticipants||[]).includes(m)); }
+
+function readDraftParts(){
+  const main = mainParticipants();
+  return draftExcl
+    .map(x=>({
+      label: (x.label||'').trim() || 'บางเมนู',
+      amount: r2(x.amount||0),
+      excluded: x.excluded.filter(n=>main.includes(n)),
+      participants: main.filter(n=>!x.excluded.includes(n))
+    }))
+    .filter(p=>p.excluded.length);
+}
+function exclFaces(names){ return names.map(n=>getEmoji(n)).join(''); }
+
+function renderParts(){
+  const wrap = el('partsWrap');
+  wrap.innerHTML = '';
+  draftExcl.forEach((x, i)=>{
+    const row = document.createElement('div');
+    row.className = 'ne-row';
+    row.innerHTML = `
+      <span class="ne-faces" aria-hidden="true">${exclFaces(x.excluded)}</span>
+      <span class="ne-sent"><b>${x.excluded.map(esc).join(', ')}</b> ไม่ได้กิน ${esc((x.label||'').trim()||'บางเมนู')} <b>฿${fmt(x.amount)}</b></span>
+      <button type="button" class="ne-icon" aria-label="แก้">✏️</button>
+      <button type="button" class="ne-icon" aria-label="ลบ">✕</button>`;
+    const [editBtn, delBtn] = row.querySelectorAll('.ne-icon');
+    row.querySelector('.ne-sent').addEventListener('click', ()=> openExcl(i));
+    editBtn.addEventListener('click', ()=> openExcl(i));
+    delBtn.addEventListener('click', ()=>{ draftExcl.splice(i, 1); renderParts(); });
+    wrap.appendChild(row);
+  });
+  const canUse = mainParticipants().length >= 2;
+  el('addPartBtn').hidden = draftExcl.length>0 || !canUse;
+  el('addMoreBtn').hidden = draftExcl.length===0;
+  updateSplitPreview();
+}
+
+function updateSplitPreview(){
+  const box = el('splitPreview');
+  if(!draftExcl.length){ box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false;
+  const total = parseFloat(el('expAmount').value) || 0;
+  if(!total){ box.innerHTML = '<span class="sp-muted">ใส่จำนวนเงินทั้งบิลด้านบน แล้วจะคำนวณให้</span>'; return; }
+  const parts = readDraftParts();
+  const sum = parts.reduce((s,p)=>s+p.amount, 0);
+  if(sum > total + 0.005){
+    box.innerHTML = `<span class="sp-err">ของที่ไม่ได้กินรวม ฿${fmt(sum)} เกินยอดทั้งบิล ฿${fmt(total)}</span>`;
+    return;
+  }
+  if(parts.some(p=>!p.participants.length)){
+    box.innerHTML = '<span class="sp-err">มีบางรายการที่ไม่เหลือใครกินเลย ลองแก้อีกทีนะ</span>';
+    return;
+  }
+  box.innerHTML = `👉 ${esc(resultSentence({amount: total, participants: mainParticipants(), parts}))}`;
+}
+
+/* แผ่นเลือก "ใครไม่ได้กิน อะไร เท่าไร" */
+let exclEditing = -1;
+let exclPick = [];
+function exclChip(name, active, onClick){
   const b = document.createElement('div');
-  b.className = 'avatar-pick participant' + (active?' active':'');
-  b.innerHTML = `${active ? '<span class="mark">✓</span>':''}<span class="dot" style="border-color:${colorFor(name,state.members)}">${getEmoji(name)}</span><span class="nm">${esc(name)}</span>`;
+  b.className = 'avatar-pick excl' + (active?' active':'');
   b.title = name;
+  b.innerHTML = `${active ? '<span class="mark">✕</span>':''}<span class="dot" style="border-color:${colorFor(name,state.members)}">${getEmoji(name)}</span><span class="nm">${esc(name)}</span>`;
   b.addEventListener('click', onClick);
   return b;
 }
-function renderParts(focusIndex){
-  const wrap = el('partsWrap');
+function renderExclPeople(){
+  const wrap = el('exclPeople');
   wrap.innerHTML = '';
-  draftParts.forEach((pt, i)=>{
-    pt.participants = pt.participants.filter(m=>state.members.includes(m));
-    const box = document.createElement('div');
-    box.className = 'part-box';
-    box.innerHTML = `
-      <div class="part-head"><span>✂️ ส่วนแยกที่ ${i+1}</span><button type="button" class="linkbtn">ลบส่วนนี้</button></div>
-      <label>ส่วนนี้คืออะไร <span class="picker-hint" style="display:inline;">(ไม่ใส่ก็ได้)</span></label>
-      <input type="text" class="pl" placeholder="เช่น อาหาร+กับแกล้ม" maxlength="40">
-      <label>จำนวนเงินของส่วนนี้ (บาท)</label>
-      <input type="number" class="pa" placeholder="เช่น 1800" min="0" inputmode="decimal">
-      <label>ใครกินส่วนนี้</label>
-      <div class="picker-hint part-hint">แตะชื่อคนที่ไม่ได้กินเพื่อเอาออก</div>
-      <div class="participants pp"></div>`;
-    const pl = box.querySelector('.pl'), pa = box.querySelector('.pa');
-    pl.value = pt.label; pa.value = pt.amount;
-    pl.addEventListener('input', ()=>{ pt.label = pl.value; updateSplitPreview(); });
-    pa.addEventListener('input', ()=>{ pt.amount = pa.value; updateSplitPreview(); });
-    box.querySelector('.part-head .linkbtn').addEventListener('click', ()=>{ draftParts.splice(i, 1); renderParts(); });
-    const ppw = box.querySelector('.pp');
-    state.members.forEach(name=>{
-      const active = pt.participants.includes(name);
-      ppw.appendChild(personPick(name, active, ()=>{
-        pt.participants = active ? pt.participants.filter(m=>m!==name) : pt.participants.concat(name);
-        renderParts();
-      }));
-    });
-    wrap.appendChild(box);
+  mainParticipants().forEach(name=>{
+    const active = exclPick.includes(name);
+    wrap.appendChild(exclChip(name, active, ()=>{
+      exclPick = active ? exclPick.filter(n=>n!==name) : exclPick.concat(name);
+      el('exclMsg').textContent = '';
+      renderExclPeople();
+    }));
   });
-  el('addPartBtn').textContent = draftParts.length ? '+ แยกอีกส่วน' : '+ แยกส่วนที่บางคนไม่ได้กิน';
-  el('participantsLabelText').textContent = draftParts.length ? 'ใครหารส่วนที่เหลือ' : 'ใครร่วมหารบิลนี้บ้าง';
-  if(typeof focusIndex==='number'){
-    const boxes = wrap.querySelectorAll('.part-box');
-    if(boxes[focusIndex]) boxes[focusIndex].querySelector('.pl').focus();
-  }
-  updateSplitPreview();
+  el('exclQ').textContent = exclPick.length ? `${exclPick.join(', ')} ไม่ได้กินอะไร` : 'ไม่ได้กินอะไร';
 }
-function readDraftParts(){
-  return draftParts.map((p, i)=>({
-    label: p.label.trim() || `ส่วนที่ ${i+1}`,
-    amount: r2(parseFloat(p.amount) || 0),
-    participants: state.members.filter(m=>p.participants.includes(m))
-  }));
+function renderExclQuick(){
+  const wrap = el('exclQuick');
+  wrap.innerHTML = '';
+  const cur = el('exclLabel').value.trim();
+  QUICK_LABELS.forEach(t=>{
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'qchip' + (cur===t ? ' on' : '');
+    b.textContent = t;
+    b.addEventListener('click', ()=>{
+      el('exclLabel').value = (cur===t) ? '' : t;
+      renderExclQuick();
+    });
+    wrap.appendChild(b);
+  });
 }
-function updateSplitPreview(){
-  const box = el('splitPreview');
-  if(!draftParts.length){ box.hidden = true; box.innerHTML = ''; return; }
-  box.hidden = false;
+function openExcl(index){
+  exclEditing = typeof index==='number' ? index : -1;
+  const x = exclEditing>=0 ? draftExcl[exclEditing] : null;
+  exclPick = x ? [...x.excluded] : [];
+  el('exclLabel').value = x ? (x.label||'') : '';
+  el('exclAmount').value = x ? String(x.amount) : '';
+  el('exclMsg').textContent = '';
+  el('exclDone').textContent = x ? 'บันทึกการแก้ไข' : 'เสร็จ';
+  renderExclPeople();
+  renderExclQuick();
+  el('exclSheet').classList.add('show');
+  el('exclSheet').setAttribute('aria-hidden','false');
+  document.body.style.overflow = 'hidden';
+}
+function closeExcl(){
+  el('exclSheet').classList.remove('show');
+  el('exclSheet').setAttribute('aria-hidden','true');
+  document.body.style.overflow = '';
+}
+function saveExcl(){
+  const main = mainParticipants();
+  const amount = r2(parseFloat(el('exclAmount').value) || 0);
+  const label = el('exclLabel').value.trim();
+  const msg = t => { el('exclMsg').textContent = t; };
+  const pick = exclPick.filter(n=>main.includes(n));
+  if(!pick.length){ msg('แตะเลือกคนที่ไม่ได้กินก่อนนะ'); return; }
+  if(pick.length >= main.length){ msg('ต้องเหลืออย่างน้อย 1 คนที่กินส่วนนี้นะ'); return; }
+  if(!(amount > 0)){ msg('ใส่ราคาของที่ไม่ได้กินด้วยนะ'); return; }
   const total = parseFloat(el('expAmount').value) || 0;
-  const main = state.members.filter(m=>(state.currentParticipants||[]).includes(m));
-  const parts = readDraftParts().filter(p=>p.amount > 0);
-  let html = '<div class="sp-title">สรุปบิลนี้</div>';
-  if(!total){
-    box.innerHTML = html + '<div class="sp-muted">ใส่จำนวนเงินทั้งบิลด้านบนก่อนนะ</div>';
-    return;
-  }
-  const sum = parts.reduce((s,p)=>s+p.amount, 0);
-  const rem = r2(total - sum);
-  if(rem < -0.005){
-    box.innerHTML = html + `<div class="sp-err">ส่วนแยกรวมกัน ฿${fmt(sum)} เกินยอดทั้งบิล ฿${fmt(total)}</div>`;
-    return;
-  }
-  const line = (label, amt, n)=> `<div class="sp-line"><span>${esc(label)} ฿${fmt(amt)} หาร ${n} คน</span>${n ? `<b>คนละ ฿${fmt(amt/n)}</b>` : '<b class="sp-err">ยังไม่ได้เลือกคน</b>'}</div>`;
-  parts.forEach(p=>{ html += line(p.label, p.amount, p.participants.length); });
-  if(rem > 0.005) html += line('ที่เหลือ', rem, main.length);
-  if(!parts.length) html += '<div class="sp-muted">ใส่จำนวนเงินของส่วนแยกด้วยนะ</div>';
-  const shares = expenseShares({amount: total, participants: main, parts});
-  const people = state.members.filter(m=>shares[m]);
-  if(people.length && parts.length){
-    html += `<div class="sp-people">${people.map(m=>`<span>${getEmoji(m)} ${esc(m)} ฿${fmt(shares[m])}</span>`).join('')}</div>`;
-  }
-  box.innerHTML = html;
+  const others = draftExcl.filter((_, i)=> i!==exclEditing).reduce((s,x)=>s+x.amount, 0);
+  if(total && others + amount > total + 0.005){ msg(`เกินยอดทั้งบิล ฿${fmt(total)} เช็กตัวเลขอีกทีนะ`); return; }
+  const item = {excluded: pick, label, amount};
+  if(exclEditing>=0) draftExcl[exclEditing] = item; else draftExcl.push(item);
+  closeExcl();
+  renderParts();
 }
 
 function addExpense(){
@@ -374,15 +447,10 @@ function addExpense(){
   if(!paidBy){ el('expenseMsg').textContent='เลือกคนที่ออกเงินก่อนนะ'; return; }
   const parts = readDraftParts();
   const msg = t => { el('expenseMsg').textContent = t; };
-  for(let i=0;i<parts.length;i++){
-    if(!(parts[i].amount > 0)){ msg(`ใส่จำนวนเงินของส่วนแยกที่ ${i+1} ด้วยนะ (หรือกดลบส่วนนี้)`); return; }
-    if(!parts[i].participants.length){ msg(`เลือกคนที่กินส่วนแยกที่ ${i+1} อย่างน้อย 1 คนนะ`); return; }
-  }
+  if(participants.length===0){ msg('เลือกคนที่ร่วมหารบิลนี้อย่างน้อย 1 คนนะ'); return; }
+  if(parts.some(p=>!p.participants.length)){ msg('มีของที่ไม่เหลือใครกินเลย แตะแก้ในรายการ "ไม่ได้กิน" ก่อนนะ'); return; }
   const rem = r2(amount - parts.reduce((s,p)=>s+p.amount, 0));
-  if(rem < -0.005){ msg('ส่วนแยกรวมกันเกินยอดทั้งบิล เช็กตัวเลขอีกทีนะ'); return; }
-  if(rem > 0.005 && participants.length===0){
-    msg(parts.length ? 'เลือกคนที่หารส่วนที่เหลืออย่างน้อย 1 คนนะ' : 'เลือกคนที่ร่วมหารบิลนี้อย่างน้อย 1 คนนะ'); return;
-  }
+  if(rem < -0.005){ msg('ของที่ไม่ได้กินรวมกันเกินยอดทั้งบิล เช็กตัวเลขอีกทีนะ'); return; }
 
   const exp = { id: Date.now()+Math.random(), desc, amount, paidBy, participants };
   if(parts.length) exp.parts = parts;
@@ -390,7 +458,7 @@ function addExpense(){
 
   el('expDesc').value='';
   el('expAmount').value='';
-  draftParts = [];
+  draftExcl = [];
   renderAll();
 }
 
@@ -410,9 +478,8 @@ function renderExpenseList(){
     const share = exp.amount / exp.participants.length;
     const hasParts = exp.parts && exp.parts.length;
     const meta = hasParts
-      ? `${esc(exp.paidBy)} ออกเงินไปก่อน &middot; แยกหาร ${splitGroups(exp).length} ส่วน
-         <div class="split-lines">${splitGroups(exp).map(g=>
-           `• ${esc(g.label)} ฿${fmt(g.amount)} หาร ${g.people.length} คน (คนละ ฿${fmt(g.amount/g.people.length)}): ${g.people.map(esc).join(', ')}`).join('<br>')}</div>`
+      ? `${esc(exp.paidBy)} ออกเงินไปก่อน
+         <div class="split-lines">${splitLines(exp, state.members.length).map(esc).join('<br>')}</div>`
       : `${esc(exp.paidBy)} ออกเงินไปก่อน &middot; หารกัน ${exp.participants.length} คน (คนละ ฿${fmt(share)})<br>
         ร่วมหาร: ${exp.participants.map(esc).join(', ')}`;
     const card = document.createElement('div');
@@ -645,7 +712,11 @@ function buildSnapshot(){
     members: involved.map(name=>({name, emoji:getEmoji(name)})),
     expenses: state.expenses.map(e=>{
       const o = {desc:e.desc, amount:e.amount, paidBy:e.paidBy, participants:[...e.participants]};
-      if(e.parts && e.parts.length) o.parts = e.parts.map(p=>({label:p.label, amount:p.amount, participants:[...p.participants]}));
+      if(e.parts && e.parts.length) o.parts = e.parts.map(p=>{
+        const q = {label:p.label, amount:p.amount, participants:[...p.participants]};
+        if(Array.isArray(p.excluded)) q.excluded = [...p.excluded];
+        return q;
+      });
       return o;
     }),
     total: r2(state.expenses.reduce((s,e)=>s+e.amount, 0)),
@@ -713,7 +784,7 @@ function openHistory(id){
   const expenses = h.expenses.map(e=>{
     const lines = splitLines(e, everyone);
     const sub = (e.parts && e.parts.length)
-      ? `${emo[e.paidBy]||''} ${esc(e.paidBy)} ออกให้ก่อน<br>${lines.map(l=>'• '+esc(l)).join('<br>')}`
+      ? `${emo[e.paidBy]||''} ${esc(e.paidBy)} ออกให้ก่อน<br>${lines.map(esc).join('<br>')}`
       : `${emo[e.paidBy]||''} ${esc(e.paidBy)} ออกให้ก่อน, ${esc(lines[0])}`;
     return `
       <div class="ex">
@@ -963,7 +1034,7 @@ function drawShareCard(ctx, snap, H){
   snap.expenses.slice(0, MAX_EXP).forEach((e, i)=>{
     const lines = splitLines(e, everyone);
     const subs = (e.parts && e.parts.length)
-      ? [`${e.paidBy} ออกให้ก่อน`].concat(lines.map(l=>'• '+l))
+      ? [`${e.paidBy} ออกให้ก่อน`].concat(lines)
       : [`${e.paidBy} ออกให้ก่อน, ${lines[0]}`];
     const rh = 30 + subs.length * 16;
     if(draw){
@@ -1105,10 +1176,13 @@ el('confirmOk').addEventListener('click', ()=>{
 el('addMemberBtn').addEventListener('click', addMember);
 el('memberInput').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); addMember(); }});
 el('addExpenseBtn').addEventListener('click', addExpense);
-el('addPartBtn').addEventListener('click', ()=>{
-  draftParts.push({label:'', amount:'', participants:[...state.members]});
-  renderParts(draftParts.length-1);
-});
+el('addPartBtn').addEventListener('click', ()=> openExcl());
+el('addMoreBtn').addEventListener('click', ()=> openExcl());
+el('exclClose').addEventListener('click', closeExcl);
+el('exclSheet').addEventListener('click', e=>{ if(e.target===el('exclSheet')) closeExcl(); });
+el('exclDone').addEventListener('click', saveExcl);
+el('exclLabel').addEventListener('input', renderExclQuick);
+el('exclAmount').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); saveExcl(); } });
 el('expAmount').addEventListener('input', updateSplitPreview);
 el('tripName').addEventListener('input', e=>{ state.tripName = e.target.value; scheduleSave(); });
 // แตะแล้วเลือกข้อความทั้งหมด พิมพ์ทับได้ทันที
@@ -1169,6 +1243,7 @@ document.addEventListener('keydown', e=>{
   if(e.key!=='Escape') return;
   if(el('confirmModal').classList.contains('show')) hideConfirm();
   else if(el('imgPreview').classList.contains('show')) closePreview();
+  else if(el('exclSheet').classList.contains('show')) closeExcl();
   else if(openHistoryId) closeHistory();
 });
 el('histClearAll').addEventListener('click', ()=>{
