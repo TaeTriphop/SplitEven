@@ -299,7 +299,7 @@ function renderParticipantsPicker(){
 /* ---------- มีใครไม่ได้กินอะไรไหม ---------- */
 // draftExcl = [{excluded:[ชื่อ], label, amount}] ส่วนที่บางคนไม่ได้กิน (ยังไม่บันทึก)
 let draftExcl = [];
-const QUICK_LABELS = ['เมนูก่อนมาถึง', 'อาหาร' , 'ของหวาน', 'เครื่องดื่ม', 'กับแกล้ม'];
+const QUICK_LABELS = ['อาหาร', 'กับแกล้ม', 'ของหวาน', 'เครื่องดื่ม', 'เมนูก่อนมาถึง'];
 function mainParticipants(){ return state.members.filter(m=>(state.currentParticipants||[]).includes(m)); }
 
 function readDraftParts(){
@@ -354,7 +354,35 @@ function updateSplitPreview(){
     box.innerHTML = '<span class="sp-err">มีบางรายการที่ไม่เหลือใครกินเลย ลองแก้อีกทีนะ</span>';
     return;
   }
-  box.innerHTML = `👉 ${esc(resultSentence({amount: total, participants: mainParticipants(), parts}))}`;
+  box.innerHTML = resultGroupsHtml({amount: total, participants: mainParticipants(), parts});
+}
+
+// สรุปยอดแต่ละคนเป็นแถว คนที่จ่ายต่างขึ้นก่อน คนอื่นที่จ่ายเท่ากันรวมเป็นแถวสุดท้าย
+function resultGroupsHtml(exp){
+  const sh = expenseShares(exp);
+  const order = expensePeople(exp).filter(n=>sh[n]);
+  const groups = [];
+  order.forEach(n=>{
+    const k = fmt(r2(sh[n]));
+    let g = groups.find(x=>x.k===k);
+    if(!g){ g = {k, names:[]}; groups.push(g); }
+    g.names.push(n);
+  });
+  const big = groups.length>1 ? groups.reduce((a,b)=> b.names.length > a.names.length ? b : a) : null;
+  const useOthers = !!big && big.names.length >= 2;
+  const sorted = useOthers ? groups.filter(g=>g!==big).concat(big) : groups;
+  const rows = sorted.map(g=>{
+    const label = groups.length===1 ? `ทุกคน ${g.names.length} คน`
+      : (useOthers && g===big) ? `คนอื่น ${g.names.length} คน`
+      : g.names.join(', ');
+    const faces = g.names.slice(0, 5).map(n=>getEmoji(n)).join('') + (g.names.length > 5 ? '…' : '');
+    const each = g.names.length > 1 ? '<small>คนละ</small>' : '';
+    return `<div class="rg-row" title="${esc(g.names.join(', '))}">
+      <div class="rg-who"><span class="rg-faces" aria-hidden="true">${faces}</span><span class="rg-names">${esc(label)}</span></div>
+      <div class="rg-amt">${each}฿${g.k}</div>
+    </div>`;
+  }).join('');
+  return `<div class="rg-title">👉 แต่ละคนจ่ายบิลนี้</div><div class="rg-list">${rows}</div>`;
 }
 
 /* แผ่นเลือก "ใครไม่ได้กิน อะไร เท่าไร" */
